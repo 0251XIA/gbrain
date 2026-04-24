@@ -1,5 +1,5 @@
 import re
-from .models import ParsedPrompt, IntegratedContent
+from .models import ParsedPrompt, IntegratedContent, SYNONYM_MAP
 
 
 class ContentIntegrator:
@@ -39,33 +39,49 @@ class ContentIntegrator:
 
     def _distribute_content(self, content: str, module_contents: dict[str, list[str]], modules: list[str]):
         """将内容分配到对应模块，使用关键词匹配避免误匹配"""
-        # 构建每个模块的关键词集合
+        # 构建每个模块的关键词集合（含同义词扩展）
         module_keywords: dict[str, list[str]] = {}
         for module in modules:
-            # 提取模块名中的实词作为关键词
             keywords = re.findall(r'[\w]+', module)
-            # 过滤掉通用词
             stopwords = {'模块', '章节', '第', '一', '二', '三', '四', '五', '的', '和'}
             keywords = [k for k in keywords if k not in stopwords and len(k) > 1]
-            module_keywords[module] = keywords if keywords else [module]
+            # 同义词扩展
+            expanded = set(keywords)
+            for kw in keywords:
+                if kw in SYNONYM_MAP:
+                    expanded.update(SYNONYM_MAP[kw])
+            module_keywords[module] = list(expanded)
 
-        # 评分分配：每个模块根据关键词命中数评分
-        best_module = None
-        best_score = 0
+        def _keyword_matches(keyword: str, text: str) -> bool:
+            """检查关键词是否在文本中（支持中文）"""
+            # 直接包含
+            if keyword in text:
+                return True
+            # 中文关键词4+字时，检查2-char子串匹配
+            if len(keyword) >= 4 and all('\u4e00' <= c <= '\u9fff' for c in keyword):
+                # 使用滑动窗口检查是否有2-char子串在text中
+                for i in range(len(keyword) - 1):
+                    sub = keyword[i:i+2]
+                    if sub in text:
+                        return True
+            return False
 
+        # 计算每个模块的匹配分数
+        module_scores: dict[str, int] = {}
         for module in modules:
             score = 0
             for keyword in module_keywords[module]:
-                # 使用词语边界匹配，避免"模块1"匹配到"模块10"
-                if re.search(rf'\b{re.escape(keyword)}\b', content):
+                if _keyword_matches(keyword, content):
                     score += 1
-            if score > best_score:
-                best_score = score
-                best_module = module
+            module_scores[module] = score
 
-        # 只有当有足够置信度时才分配
-        if best_module and best_score > 0:
-            module_contents[best_module].append(content)
+        # 多模块分配：分配给所有分数超过阈值(0.3*最高分)的模块
+        max_score = max(module_scores.values()) if module_scores else 0
+        threshold = max_score * 0.3
+
+        for module, score in module_scores.items():
+            if score >= threshold and score > 0:
+                module_contents[module].append(content)
 
     def _extract_cases(self, file_contents: list[str]) -> list[dict]:
         """从文件内容中提取案例，使用多种模式匹配"""
