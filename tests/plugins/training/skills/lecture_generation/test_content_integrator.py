@@ -28,6 +28,34 @@ def test_integrate_content():
     assert "模块1" in result.module_contents
 
 
+def test_distribute_content_fallback_pool():
+    """未匹配内容应进入 fallback 池重新分配"""
+    integrator = ContentIntegrator()
+
+    parsed = ParsedPrompt(
+        topic="产品培训",
+        audience="全员",
+        position="员工",
+        industry="通用",
+        duration="60分钟",
+        style="专业严谨",
+        objectives=["了解企业文化", "掌握产品知识"],
+        special_requirements=[],
+        forbidden_content=[],
+        num_modules=2,
+        outline_structure={"模块拆解层": ["模块1-企业文化", "模块2-产品知识"]}
+    )
+
+    # 内容与模块无关键词匹配
+    file_contents = ["这是一段通用的公司介绍内容，与具体模块无直接关联"]
+
+    result = integrator.integrate(parsed, file_contents)
+
+    # 内容应至少分配到一个模块（fallback 到第一个）
+    total = sum(len(v) for v in result.module_contents.values())
+    assert total >= 1
+
+
 def test_distribute_content_multi_module():
     """同一条内容应分配给多个相关模块"""
     integrator = ContentIntegrator()

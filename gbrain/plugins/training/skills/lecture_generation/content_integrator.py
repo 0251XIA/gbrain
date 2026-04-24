@@ -14,9 +14,18 @@ class ContentIntegrator:
         for module in modules:
             module_contents[module] = []
 
+        # 收集未分配的内容
+        fallback_pool: list[str] = []
+
         # 分配文件内容到模块
         for content in file_contents:
-            self._distribute_content(content, module_contents, modules)
+            distributed = self._distribute_content(content, module_contents, modules)
+            if not distributed:
+                fallback_pool.append(content)
+
+        # Fallback 池处理：按学习目标关键词重新匹配
+        if fallback_pool and parsed.objectives:
+            self._process_fallback_pool(fallback_pool, module_contents, modules, parsed.objectives)
 
         # 提取案例库
         case_library = self._extract_cases(file_contents)
@@ -37,8 +46,32 @@ class ContentIntegrator:
                 modules.extend(items)
         return modules
 
-    def _distribute_content(self, content: str, module_contents: dict[str, list[str]], modules: list[str]):
-        """将内容分配到对应模块，使用关键词匹配避免误匹配"""
+    def _process_fallback_pool(self, fallback_pool: list[str], module_contents: dict[str, list[str]], modules: list[str], objectives: list[str]):
+        """将未分配内容按学习目标关键词重新分配"""
+        # 提取学习目标关键词
+        objective_keywords: list[str] = []
+        for obj in objectives:
+            keywords = re.findall(r'[\w]+', obj)
+            objective_keywords.extend([k for k in keywords if len(k) > 1])
+
+        # 尝试用学习目标关键词匹配
+        for content in fallback_pool:
+            best_module = None
+            best_score = 0
+            for module in modules:
+                score = sum(1 for kw in objective_keywords if re.search(rf'\b{re.escape(kw)}\b', content))
+                if score > best_score:
+                    best_score = score
+                    best_module = module
+
+            if best_module and best_score > 0:
+                module_contents[best_module].append(content)
+            elif modules:
+                # 仍有剩余则分配给第一个模块
+                module_contents[modules[0]].append(content)
+
+    def _distribute_content(self, content: str, module_contents: dict[str, list[str]], modules: list[str]) -> bool:
+        """将内容分配到对应模块，返回是否分配成功"""
         # 构建每个模块的关键词集合（含同义词扩展）
         module_keywords: dict[str, list[str]] = {}
         for module in modules:
@@ -79,9 +112,13 @@ class ContentIntegrator:
         max_score = max(module_scores.values()) if module_scores else 0
         threshold = max_score * 0.3
 
+        distributed = False
         for module, score in module_scores.items():
             if score >= threshold and score > 0:
                 module_contents[module].append(content)
+                distributed = True
+
+        return distributed
 
     def _extract_cases(self, file_contents: list[str]) -> list[dict]:
         """从文件内容中提取案例，使用多种模式匹配"""
