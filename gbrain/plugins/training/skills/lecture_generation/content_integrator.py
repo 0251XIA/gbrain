@@ -72,12 +72,33 @@ class ContentIntegrator:
 
     def _distribute_content(self, content: str, module_contents: dict[str, list[str]], modules: list[str]) -> bool:
         """将内容分配到对应模块，返回是否分配成功"""
+        # 数字映射：阿拉伯数字 -> 中文数字
+        digit_map = {'1': '一', '2': '二', '3': '三', '4': '四', '5': '五',
+                     '6': '六', '7': '七', '8': '八', '9': '九', '0': '零'}
+
         # 构建每个模块的关键词集合（含同义词扩展）
         module_keywords: dict[str, list[str]] = {}
         for module in modules:
             keywords = re.findall(r'[\w]+', module)
             stopwords = {'模块', '章节', '第', '一', '二', '三', '四', '五', '的', '和'}
             keywords = [k for k in keywords if k not in stopwords and len(k) > 1]
+
+            # 处理 "第X章" 模式：同时添加中文数字变体
+            chinese_num_keywords = set()
+            for kw in keywords:
+                if re.match(r'^\d+章$', kw):  # 如 "1章", "2章"
+                    chinese = ''.join(digit_map.get(c, c) for c in kw)
+                    chinese_num_keywords.add(chinese)  # 如 "一章"
+                elif re.match(r'^[零一二三四五六七八九]+章$', kw):  # 如 "一章"
+                    arabic = kw[:-1]  # 去掉"章"
+                    # 转回阿拉伯数字（简化处理）
+                    rev_map = {'零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
+                              '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'}
+                    arabic_num = ''.join(rev_map.get(c, c) for c in arabic) + '章'
+                    chinese_num_keywords.add(arabic_num)
+
+            keywords = list(set(keywords) | chinese_num_keywords)
+
             # 同义词扩展
             expanded = set(keywords)
             for kw in keywords:
@@ -108,15 +129,16 @@ class ContentIntegrator:
                     score += 1
             module_scores[module] = score
 
-        # 多模块分配：分配给所有分数超过阈值(0.3*最高分)的模块
+        # 单模块分配：只分配给得分最高的模块
         max_score = max(module_scores.values()) if module_scores else 0
-        threshold = max_score * 0.3
+        threshold = max_score  # 只有得分等于最高分才分配
 
         distributed = False
         for module, score in module_scores.items():
             if score >= threshold and score > 0:
                 module_contents[module].append(content)
                 distributed = True
+                break  # 只分配给第一个最佳匹配模块
 
         return distributed
 
