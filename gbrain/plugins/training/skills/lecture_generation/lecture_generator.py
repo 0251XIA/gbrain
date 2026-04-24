@@ -50,6 +50,9 @@ class LectureGenerator:
 ## 学习目标
 {objectives}
 
+## 知识库内容（用于生成培训讲义的原始材料）
+{knowledge_context}
+
 ## 内容单元结构
 
 ### 开篇锚定层
@@ -87,6 +90,9 @@ class LectureGenerator:
 ## 学习目标
 {objectives}
 
+## 知识库内容（用于生成培训讲义的原始材料）
+{knowledge_context}
+
 ## 合规要点结构
 
 ### 开篇锚定层
@@ -123,6 +129,9 @@ class LectureGenerator:
 
 ## 学习目标
 {objectives}
+
+## 知识库内容（用于生成培训讲义的原始材料）
+{knowledge_context}
 
 ## 销售技能结构
 
