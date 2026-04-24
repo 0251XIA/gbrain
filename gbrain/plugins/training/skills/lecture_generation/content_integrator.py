@@ -125,32 +125,34 @@ class ContentIntegrator:
         cases = []
         # 案例模式：匹配"案例"或"case"开头的独立段落或章节
         case_patterns = [
-            # 模式1: "案例N：" 或 "案例N：" 后面跟内容
-            re.compile(r'案例\s*[\d零一二三四五六七八九十百]+[：:]\s*(.{20,500}?)(?=\n\n|\n案例|\Z)', re.DOTALL),
-            # 模式2: "案例：" 后面跟内容
-            re.compile(r'案例\s*：[：:]\s*(.{20,500}?)(?=\n\n|\Z)', re.DOTALL),
+            # 模式1: "案例N：" 或 "案例N：" 后面跟内容（完整段落）
+            re.compile(r'案例\s*[\d零一二三四五六七八九十百]+[：:]\s*(.{20,})?(?=\n\n|\n案例|\Z)', re.DOTALL),
+            # 模式2: "案例：" 后面跟内容（完整段落）
+            re.compile(r'案例\s*：[：:]\s*(.{20,})?(?=\n\n|\Z)', re.DOTALL),
             # 模式3: 独立的案例标题行后面跟内容段落
-            re.compile(r'^#{1,3}\s*案例[^\n]*\n+(.{20,500}?)(?=\n#{1,3}\s|\Z)', re.DOTALL | re.MULTILINE),
+            re.compile(r'^#{1,3}\s*案例[^\n]*\n+(.{20,})?(?=\n#{1,3}\s|\Z)', re.DOTALL | re.MULTILINE),
             # 模式4: "CASE" 或 "Case" 开头的内容块
-            re.compile(r'(?:^|\n)(CASE|case|Case)[^\n]*\n+(.{20,500}?)(?=\n(?:CASE|case|Case)|\Z)', re.DOTALL | re.MULTILINE),
+            re.compile(r'(?:^|\n)(CASE|case|Case)[^\n]*\n+(.{20,})?(?=\n(?:CASE|case|Case)|\Z)', re.DOTALL | re.MULTILINE),
         ]
 
         for content in file_contents:
             matched_cases: set[str] = set()
             for pattern in case_patterns:
                 for match in pattern.finditer(content):
-                    case_content = match.group(1).strip()
+                    case_content = match.group(1).strip() if match.group(1) else ""
                     if case_content and case_content not in matched_cases:
                         matched_cases.add(case_content)
+                        # 按自然段落分割，最多保留3段
+                        paragraphs = re.split(r'(?<=[。！？\n])', case_content)
+                        case_text = ''.join(paragraphs[:3])
                         cases.append({
-                            "content": case_content,
+                            "content": case_text,
                             "type": "case"
                         })
 
             # 如果没有通过模式匹配到，但文件包含"案例"关键词，
-            # 则尝试提取包含关键词的整个段落
+            # 则尝试提取包含关键词的完整段落（不截断）
             if not matched_cases and ('案例' in content or re.search(r'\bcase\b', content, re.I)):
-                # 提取包含"案例"关键词的完整句子/段落
                 sentences = re.split(r'[\n。]+', content)
                 for sentence in sentences:
                     if '案例' in sentence or re.search(r'\bcase\b', sentence, re.I):

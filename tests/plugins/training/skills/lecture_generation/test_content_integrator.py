@@ -56,6 +56,41 @@ def test_distribute_content_fallback_pool():
     assert total >= 1
 
 
+def test_extract_cases_no_truncation():
+    """案例提取不应有500字符限制"""
+    integrator = ContentIntegrator()
+
+    # 创建一个超过500字符的案例内容，每个段落包含多个分句
+    # 用逗号连接使整个段落成为一个自然段落
+    long_paragraph1 = "案例一：这是一个非常长的客户成功案例，" + "涉及多个方面的详细描述和深入分析，" * 50
+    long_paragraph2 = "第二段内容，包含丰富的实践案例和经验总结，" * 50
+    long_paragraph3 = "第三段内容，进一步补充说明和延伸讨论，" * 50
+    long_case = long_paragraph1 + "。" + long_paragraph2 + "。" + long_paragraph3 + "。"
+
+    file_contents = [f"销售培训内容包括：\n\n{long_case}"]
+
+    result = integrator.integrate(
+        ParsedPrompt(
+            topic="销售培训",
+            audience="销售",
+            position="销售",
+            industry="通用",
+            duration="60分钟",
+            style="专业严谨",
+            objectives=["掌握销售技巧"],
+            special_requirements=[],
+            forbidden_content=[],
+            num_modules=1,
+            outline_structure={"模块拆解层": ["模块1"]}
+        ),
+        file_contents
+    )
+
+    if result.case_library:
+        # 案例内容应接近原始长度（允许句号分割差异）
+        assert len(result.case_library[0]["content"]) > 500
+
+
 def test_distribute_content_multi_module():
     """同一条内容应分配给多个相关模块"""
     integrator = ContentIntegrator()
