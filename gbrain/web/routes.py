@@ -347,6 +347,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             user_prompt = data.get('user_prompt', '')
             file_contents = data.get('file_contents', [])
             training_type = data.get('training_type', 'product')
+            output_format = data.get('output_format', 'lecture')
 
             # 兼容简单格式：自动构建 Markdown prompt
             if not user_prompt:
@@ -390,7 +391,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 """
 
             builder = LectureGenerationBuilder()
-            result = builder.build(user_prompt, file_contents, training_type)
+            result = builder.build(user_prompt, file_contents, training_type, output_format)
 
             return JSONResponse({
                 "success": True,
@@ -420,6 +421,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 builder = LectureGenerationBuilder()
                 topic = data['title']
                 num_chapters = data.get('num_chapters', 4)
+                output_format = data.get('output_format', 'lecture')
                 modules_md = '\n'.join([f"#### 模块{i+1}" for i in range(num_chapters)])
                 user_prompt = f"""## 基本信息
 - 培训主题：{topic}
@@ -438,7 +440,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 ### 模块拆解层
 {modules_md}
 """
-                result = builder.build(user_prompt, [], 'product')
+                result = builder.build(user_prompt, [], 'product', output_format)
                 data['content'] = result['content']
                 data['quiz_items'] = []  # Skill 版本暂不生成 quiz_items
 
