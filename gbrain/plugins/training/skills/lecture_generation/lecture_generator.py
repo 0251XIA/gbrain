@@ -226,7 +226,7 @@ class LectureGenerator:
 【时长】{duration}
 【风格】{style}
 【学习目标】
-{objectives_text}
+{objectives}
 
 请直接输出 Markdown 格式口播稿内容，不要输出解释："""
     }
@@ -236,6 +236,12 @@ class LectureGenerator:
         objectives_text = '\n'.join(f"{i+1}. {obj}" for i, obj in enumerate(parsed.objectives))
 
         module_text = self._generate_modules(parsed, integrated)
+
+        # 收集知识库内容
+        knowledge_context = ""
+        for module_name, contents in integrated.module_contents.items():
+            if contents:
+                knowledge_context += f"\n\n### {module_name}\n" + "\n".join(contents)
 
         # 根据 output_format 和 training_type 选择模板
         if output_format == "digital_human_script":
@@ -252,40 +258,16 @@ class LectureGenerator:
             duration=parsed.duration,
             style=parsed.style,
             objectives=objectives_text,
-            module_contents=module_text
+            module_contents=module_text,
+            knowledge_context=knowledge_context
         )
 
         # 使用 AI 生成实际内容
-        return self._generate_with_ai(parsed, integrated, base_content, objectives_text)
+        return self._generate_with_ai(base_content)
 
-    def _generate_with_ai(self, parsed: ParsedPrompt, integrated: IntegratedContent, base_content: str, objectives_text: str) -> str:
-        """使用 AI 根据知识库内容生成实际讲义"""
-        # 收集所有知识库内容
-        knowledge_context = ""
-        for module_name, contents in integrated.module_contents.items():
-            if contents:
-                knowledge_context += f"\n\n### {module_name}\n" + "\n".join(contents)
-
-        prompt = f"""请根据以下信息，生成完整的培训讲义。
-
-【培训主题】{parsed.topic}
-【培训受众】{parsed.audience}
-【目标岗位】{parsed.position}
-【行业】{parsed.industry}
-【时长】{parsed.duration}
-【风格】{parsed.style}
-
-【学习目标】
-{objectives_text}
-
-【知识库内容】
-{knowledge_context if knowledge_context.strip() else '（暂无知识库内容，请根据培训主题、受众和学习目标自行生成专业、实用的培训内容）'}
-
-请直接生成完整的 Markdown 格式培训讲义，内容要：
-1. 紧密围绕知识库内容，不要凭空编造
-2. 语言专业、简洁、易懂，符合成人学习规律
-3. 结构完整：包含场景引入、问题抛出、方法讲解、案例、避坑指南、即时练习
-4. 充分利用知识库中的真实案例和数据
+    def _generate_with_ai(self, base_content: str) -> str:
+        """使用 AI 根据基础内容生成实际讲义"""
+        prompt = f"""{base_content}
 
 直接输出 Markdown 内容，不需要解释："""
 
