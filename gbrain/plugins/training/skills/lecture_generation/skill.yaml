@@ -1,0 +1,41 @@
+name: training:lecture-generation
+description: 将用户 Markdown 格式需求转换为完整培训讲义
+
+inputs:
+  user_prompt:
+    type: string
+    required: true
+    description: Markdown 格式，包含需求描述和期望的大纲结构
+  file_contents:
+    type: array
+    items:
+      type: string
+    required: false
+    description: 文件内容列表（知识库/上传文档）
+  training_type:
+    type: string
+    enum:
+      - product
+      - compliance
+      - sales_skill
+    required: true
+
+outputs:
+  content:
+    type: string
+    description: Markdown 格式完整讲义
+  user_prompt_params:
+    type: object
+    description: 解析后的用户参数
+  outline:
+    type: object
+    description: 大纲结构
+  validation_report:
+    type: object
+    description: 校验报告
+  knowledge_points:
+    type: array
+    description: 知识点列表
+  metadata:
+    type: object
+    description: 元数据
