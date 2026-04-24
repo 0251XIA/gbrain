@@ -333,43 +333,75 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 
     @app.post("/api/training/admin/course/generate")
     async def api_generate_course(request: Request):
-        """AI 生成课件 API"""
-        from gbrain.plugins.training.course_gen import get_course_generator
+        """AI 生成讲义 API（基于 Skill）
+
+        支持两种输入格式：
+        1. 简单格式：{ topic, description, num_chapters, training_type, content_source }
+        2. Markdown 格式：{ user_prompt, file_contents, training_type }
+        """
+        from gbrain.plugins.training.skills.lecture_generation.builder import LectureGenerationBuilder
         try:
             body = await request.body()
             data = json.loads(body)
 
-            topic = data.get('topic', '')
-            description = data.get('description', '')
-            num_chapters = data.get('num_chapters', 4)
-            num_quiz = data.get('num_quiz', 3)
+            user_prompt = data.get('user_prompt', '')
+            file_contents = data.get('file_contents', [])
+            training_type = data.get('training_type', 'product')
 
-            if not topic:
-                return JSONResponse({"success": False, "error": "培训主题不能为空"}, status_code=400)
+            # 兼容简单格式：自动构建 Markdown prompt
+            if not user_prompt:
+                topic = data.get('topic', '')
+                description = data.get('description', '')
+                num_chapters = data.get('num_chapters', 4)
+                content_source = data.get('content_source', [])
 
-            generator = get_course_generator()
-            result = generator.generate_course(
-                topic=topic,
-                description=description,
-                num_chapters=num_chapters,
-                num_quiz=num_quiz,
-                content_source=data.get('content_source', [])
-            )
+                if not topic:
+                    return JSONResponse({"success": False, "error": "培训主题不能为空"}, status_code=400)
+
+                # 如果有选择知识库文件，获取内容
+                if content_source and not file_contents:
+                    db = Database()
+                    for page_id in content_source:
+                        page = db.get_page(page_id)
+                        if page:
+                            file_contents.append(page.get('content', ''))
+
+                # 构建 Markdown 格式 prompt（包含描述）
+                modules_md = '\n'.join([f"#### 模块{i+1}" for i in range(num_chapters)])
+                user_prompt = f"""## 基本信息
+- 培训主题：{topic}
+- 培训受众：通用员工
+- 目标岗位：通用岗位
+- 所属行业：通用行业
+- 时长：约 {num_chapters * 15} 分钟
+- 风格：专业严谨
+
+## 需求描述
+{description}
+
+## 学习目标
+1. 理解{topic}的核心概念
+2. 掌握{topic}的关键方法
+3. 能够应用{topic}解决实际问题
+
+## 大纲结构
+### 模块拆解层
+{modules_md}
+"""
+
+            builder = LectureGenerationBuilder()
+            result = builder.build(user_prompt, file_contents, training_type)
 
             return JSONResponse({
                 "success": True,
                 "content": result['content'],
-                "quiz_items": [
-                    {
-                        "id": q.id,
-                        "question": q.question,
-                        "options": q.options,
-                        "correct_index": q.correct_index,
-                        "explanation": q.explanation
-                    }
-                    for q in result['quiz_items']
-                ],
-                "search_results": result.get('search_results', [])
+                "user_prompt_params": result['user_prompt_params'],
+                "outline": result['outline'],
+                "validation_report": result['validation_report'],
+                "knowledge_points": result['knowledge_points'],
+                "case_library": result.get('case_library', []),
+                "supplementary_materials": result.get('supplementary_materials', {}),
+                "metadata": result['metadata']
             })
         except Exception as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -382,19 +414,33 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             body = await request.body()
             data = json.loads(body)
 
-            # 如果提供了 auto_generate，则使用 AI 生成课件
+            # 如果提供了 auto_generate，则使用 AI 生成讲义（Skill）
             if data.get('auto_generate'):
-                from gbrain.plugins.training.course_gen import get_course_generator
-                generator = get_course_generator()
-                result = generator.generate_course(
-                    topic=data['title'],
-                    description=data.get('description', ''),
-                    num_chapters=data.get('num_chapters', 4),
-                    num_quiz=data.get('num_quiz', 3)
-                )
+                from gbrain.plugins.training.skills.lecture_generation.builder import LectureGenerationBuilder
+                builder = LectureGenerationBuilder()
+                topic = data['title']
+                num_chapters = data.get('num_chapters', 4)
+                modules_md = '\n'.join([f"#### 模块{i+1}" for i in range(num_chapters)])
+                user_prompt = f"""## 基本信息
+- 培训主题：{topic}
+- 培训受众：通用员工
+- 目标岗位：通用岗位
+- 所属行业：通用行业
+- 时长：约 {num_chapters * 15} 分钟
+- 风格：专业严谨
+
+## 学习目标
+1. 理解{topic}的核心概念
+2. 掌握{topic}的关键方法
+3. 能够应用{topic}解决实际问题
+
+## 大纲结构
+### 模块拆解层
+{modules_md}
+"""
+                result = builder.build(user_prompt, [], 'product')
                 data['content'] = result['content']
-                data['quiz_items'] = result['quiz_items']
-                data['content_source'] = [r['page_id'] for r in result.get('search_results', [])]
+                data['quiz_items'] = []  # Skill 版本暂不生成 quiz_items
 
             task = service.create_task(
                 title=data['title'],
@@ -417,7 +463,6 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         from gbrain.plugins.training.doc_converter import get_document_converter
         from gbrain.database import Database
         import uuid
-        from datetime import datetime
 
         converter = get_document_converter()
         db = Database()
@@ -456,8 +501,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     title=title,
                     content=markdown_content,
                     category="培训资料",
-                    tags=json.dumps(["上传文档", ext.replace('.', '')]),
-                    links=json.dumps([])
+                    tags=["上传文档", ext.replace('.', '')],
+                    links=[]
                 )
 
                 results.append({

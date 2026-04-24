@@ -1,3 +1,4 @@
+import re
 from .models import ParsedPrompt, ValidationReport
 
 
@@ -50,8 +51,16 @@ class Validator:
 
     def _check_coverage(self, content: str, parsed: ParsedPrompt, issues: list[str], suggestions: list[str]) -> int:
         score = 100
-        covered_objectives = [obj for obj in parsed.objectives if obj in content]
-        missing_objectives = [obj for obj in parsed.objectives if obj not in content]
+        content_lower = content.lower()
+        covered_objectives = []
+        missing_objectives = []
+        for obj in parsed.objectives:
+            keywords = [k for k in re.findall(r'[\w]+', obj) if len(k) > 1]
+            matched = sum(1 for k in keywords if k.lower() in content_lower)
+            if matched >= len(keywords) * 0.5:
+                covered_objectives.append(obj)
+            else:
+                missing_objectives.append(obj)
         if parsed.objectives:
             coverage_ratio = len(covered_objectives) / len(parsed.objectives)
             score = int(coverage_ratio * 100)
