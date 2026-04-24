@@ -26,7 +26,7 @@ def test_generate_lecture():
         supplementary_materials={}
     )
 
-    result = generator.generate(parsed, integrated)
+    result = generator.generate(parsed, integrated, "product")
 
     assert "# 契约锁产品知识培训" in result
     assert "新入职销售" in result

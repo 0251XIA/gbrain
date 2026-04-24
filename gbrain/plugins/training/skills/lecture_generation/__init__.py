@@ -1,3 +1,11 @@
-"""training:lecture-generation Skill"""
+from .models import ParsedPrompt, IntegratedContent, LectureOutput, ValidationReport, KnowledgePoint
+from .builder import LectureGenerationBuilder
 
-__version__ = "1.0.0"
+__all__ = [
+    "ParsedPrompt",
+    "IntegratedContent",
+    "LectureOutput",
+    "ValidationReport",
+    "KnowledgePoint",
+    "LectureGenerationBuilder",
+]
