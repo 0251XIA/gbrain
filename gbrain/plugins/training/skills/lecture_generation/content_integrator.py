@@ -26,6 +26,10 @@ class ContentIntegrator:
         # Fallback 池处理：按学习目标关键词重新匹配
         if fallback_pool and parsed.objectives:
             self._process_fallback_pool(fallback_pool, module_contents, modules, parsed.objectives)
+        elif fallback_pool and modules:
+            # 如果没有学习目标但有模块未分配，则分配给第一个模块
+            for content in fallback_pool:
+                module_contents[modules[0]].append(content)
 
         # 提取案例库
         case_library = self._extract_cases(file_contents)
@@ -36,7 +40,8 @@ class ContentIntegrator:
         return IntegratedContent(
             module_contents=module_contents,
             case_library=case_library,
-            supplementary_materials=supplementary
+            supplementary_materials=supplementary,
+            raw_file_contents=file_contents  # 保存原始内容
         )
 
     def _get_modules_from_outline(self, outline: dict) -> list[str]:
@@ -129,16 +134,18 @@ class ContentIntegrator:
                     score += 1
             module_scores[module] = score
 
-        # 单模块分配：只分配给得分最高的模块
+        # 多模块分配：分配给所有得分 > 0 的模块（避免重复分配到所有模块）
+        # 如果最高分为0（没有匹配），不分配
         max_score = max(module_scores.values()) if module_scores else 0
-        threshold = max_score  # 只有得分等于最高分才分配
+        if max_score == 0:
+            return False
 
         distributed = False
         for module, score in module_scores.items():
-            if score >= threshold and score > 0:
+            if score == max_score:
                 module_contents[module].append(content)
                 distributed = True
-                break  # 只分配给第一个最佳匹配模块
+                # 不 break，继续分配给其他同最高分模块
 
         return distributed
 

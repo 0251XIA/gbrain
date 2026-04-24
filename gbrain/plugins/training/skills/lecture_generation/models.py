@@ -13,6 +13,7 @@ class ParsedPrompt:
     industry: str
     duration: str
     style: StyleType
+    description: str  # 需求描述
     objectives: list[str]
     special_requirements: list[str]
     forbidden_content: list[str]
@@ -36,6 +37,7 @@ class IntegratedContent:
     module_contents: dict
     case_library: list[dict]
     supplementary_materials: dict
+    raw_file_contents: list[str] = field(default_factory=list)  # 原始文件内容，用于补充
 
 
 @dataclass(frozen=True)

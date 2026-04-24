@@ -41,6 +41,7 @@ class LectureGenerationBuilder:
                 "audience": parsed.audience,
                 "position": parsed.position,
                 "industry": parsed.industry,
+                "description": parsed.description,
                 "objectives": parsed.objectives,
                 "special_requirements": parsed.special_requirements,
                 "forbidden_content": parsed.forbidden_content,

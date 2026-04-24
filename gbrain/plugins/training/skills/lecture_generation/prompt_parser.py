@@ -12,6 +12,9 @@ class PromptParser:
         # 提取基本信息
         info = self._extract_info(lines)
 
+        # 提取需求描述
+        description = self._extract_description(lines)
+
         # 提取学习目标
         objectives = self._extract_objectives(lines)
 
@@ -34,6 +37,7 @@ class PromptParser:
             industry=info.get('industry', ''),
             duration=info.get('duration', ''),
             style=self._parse_style(info.get('style', '专业严谨')),
+            description=description,
             objectives=objectives,
             special_requirements=special_req,
             forbidden_content=forbidden,
@@ -49,7 +53,8 @@ class PromptParser:
             '目标岗位': 'position',
             '所属行业': 'industry',
             '时长': 'duration',
-            '风格': 'style'
+            '风格': 'style',
+            '需求描述': 'description'
         }
         in_basic_info = False
         info = {}
@@ -81,6 +86,20 @@ class PromptParser:
                 if match:
                     objectives.append(match.group(1).strip())
         return objectives
+
+    def _extract_description(self, lines: list[str]) -> str:
+        """提取需求描述"""
+        in_desc = False
+        desc_lines = []
+        for line in lines:
+            if '## 需求描述' in line:
+                in_desc = True
+                continue
+            if in_desc:
+                if line.startswith('## '):
+                    break
+                desc_lines.append(line.strip())
+        return '\n'.join(desc_lines).strip()
 
     def _extract_special_requirements(self, lines: list[str]) -> list[str]:
         in_req = False
@@ -121,7 +140,8 @@ class PromptParser:
             if in_outline:
                 if line.startswith('## '):
                     break
-                if '### ' in line:
+                # 检查是否是一级标题（### 而非 ####）
+                if line.startswith('### ') and not line.startswith('#### '):
                     current_section = line.replace('### ', '').strip()
                     outline[current_section] = []
                 elif current_section and line.startswith('#### '):
@@ -129,7 +149,7 @@ class PromptParser:
         return outline
 
     def _count_modules(self, lines: list[str]) -> int:
-        return sum(1 for line in lines if re.match(r'#### 模块\d+', line))
+        return sum(1 for line in lines if re.match(r'#### 模块', line))
 
     def _parse_style(self, style: str) -> StyleType:
         style_map = {
