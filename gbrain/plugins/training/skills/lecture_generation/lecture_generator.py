@@ -74,28 +74,39 @@ class LectureGenerator:
     def _build_knowledge_context(self, integrated: IntegratedContent) -> str:
         """构建知识库上下文，用于 prompt"""
         parts = []
+        seen_contents = set()  # 用于去重
 
-        # 模块内容
+        # 模块内容（去重）
         for module_name, contents in integrated.module_contents.items():
             if contents:
-                parts.append(f"## {module_name}\n" + "\n".join(contents))
+                # 去重：避免同一个内容在多个模块中重复出现
+                for content in contents:
+                    if content not in seen_contents:
+                        seen_contents.add(content)
+                        parts.append(f"## {module_name}\n{content}")
 
         # 案例库
         if integrated.case_library:
-            parts.append("\n## 案例库\n" + "\n".join(f"- {c['content']}" for c in integrated.case_library[:5]))
+            case_text = "\n".join(f"- {c['content']}" for c in integrated.case_library[:5])
+            if case_text not in seen_contents:
+                seen_contents.add(case_text)
+                parts.append(f"\n## 案例库\n{case_text}")
 
         # 配套材料
         if integrated.supplementary_materials:
             res = integrated.supplementary_materials.get("resources", [])
             if res:
-                parts.append("\n## 配套资源\n" + "\n".join(f"- {r}" for r in res[:5]))
+                res_text = "\n".join(f"- {r}" for r in res[:5])
+                if res_text not in seen_contents:
+                    seen_contents.add(res_text)
+                    parts.append(f"\n## 配套资源\n{res_text}")
 
         # 如果模块内容太少（总字数 < 1500），使用原始文件内容补充
         total_module_chars = sum(len(c) for contents in integrated.module_contents.values() for c in contents)
         if total_module_chars < 1500 and integrated.raw_file_contents:
             raw_content = "\n\n".join(integrated.raw_file_contents)
-            if raw_content not in "\n\n".join(parts):
-                parts.insert(0, f"## 知识库原始内容（用于补充讲义）\n{raw_content}")
+            if raw_content not in seen_contents:
+                parts.insert(0, f"## 知识库原始内容\n{raw_content}")
 
         return "\n\n".join(parts) if parts else "（暂无知识库内容）"
 
@@ -133,12 +144,20 @@ class LectureGenerator:
 
 直接输出 Markdown 格式讲义内容："""
 
-        system_prompt = """你是一个企业培训课件生成专家。你的职责是：
-1. 严格按照用户提供的需求描述生成讲义，禁止编造
-2. 生成的讲义要专业、简洁、实操性强
-3. 每个章节必须有实质性内容，不能只有标题框架
-4. 案例要具体，练习题要可执行
-5. 如果知识库内容不足以支撑某个章节，使用通用商务礼仪知识补充"""
+        system_prompt = """你是一个企业培训课件生成专家。
+
+【重要禁止事项】
+- 禁止重复输出"培训目标"、"课程结构"等已在输入中存在的标题
+- 禁止输出类似"本章将介绍..."的空洞章节描述
+- 禁止编造知识库中不存在的具体内容
+
+【正确做法】
+1. 严格基于"知识库内容"中的真实信息生成讲义
+2. 每个章节必须有实质性内容（概念解释、操作步骤、案例等）
+3. 案例要具体可执行，练习题要有标准答案
+4. 语言专业简洁，符合成人学习特点
+
+当知识库内容不足以支撑某个模块时，使用通用的商务礼仪知识补充，但不要留空章节。"""
 
         try:
             result = call_llm(prompt, system_prompt)

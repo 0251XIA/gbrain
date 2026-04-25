@@ -367,8 +367,16 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                         if page:
                             file_contents.append(page.get('content', ''))
 
-                # 构建 Markdown 格式 prompt（包含描述）
-                modules_md = '\n'.join([f"#### 模块{i+1}" for i in range(num_chapters)])
+                # 构建 Markdown 格式 prompt（包含完整描述）
+                # 尝试从描述中提取章节名称（支持 ### 第X章 或 第X章 格式）
+                import re
+                # 匹配 Markdown 标题中的章节：### 第1章 职业形象、## 第2章 商务礼仪 等
+                chapter_matches = re.findall(r'(?:^#{1,3}\s*)?第(\d+)章\s+(.+?)(?=\n|$)', description, re.MULTILINE)
+                if chapter_matches:
+                    modules_md = '\n'.join([f'#### 模块{i+1}：{name.strip()}' for i, (_, name) in enumerate(chapter_matches)])
+                else:
+                    modules_md = '\n'.join([f'#### 模块{i+1}' for i in range(num_chapters)])
+
                 user_prompt = f"""## 基本信息
 - 培训主题：{topic}
 - 培训受众：通用员工
@@ -380,18 +388,26 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 ## 需求描述
 {description}
 
-## 学习目标
-1. 理解{topic}的核心概念
-2. 掌握{topic}的关键方法
-3. 能够应用{topic}解决实际问题
-
 ## 大纲结构
 ### 模块拆解层
 {modules_md}
 """
 
             builder = LectureGenerationBuilder()
-            result = builder.build(user_prompt, file_contents, training_type, output_format)
+
+            # 自动检测培训类型
+            training_type_auto = training_type
+            topic_lower = topic.lower()
+            desc_lower = description.lower()
+            combined = topic_lower + ' ' + desc_lower
+            if any(kw in combined for kw in ['礼仪', '礼仪培训', '商务礼仪', '职场礼仪']):
+                training_type_auto = 'business_etiquette'
+            elif any(kw in combined for kw in ['销售', '话术', '客户']):
+                training_type_auto = 'sales_skill'
+            elif any(kw in combined for kw in ['合规', '法规', '制度']):
+                training_type_auto = 'compliance'
+
+            result = builder.build(user_prompt, file_contents, training_type_auto, output_format)
 
             return JSONResponse({
                 "success": True,
