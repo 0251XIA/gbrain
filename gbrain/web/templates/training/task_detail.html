@@ -95,6 +95,24 @@ async function loadTask() {
         if (data.task) {
             const content = data.task.content || '';
             const summary = extractSummary(content);
+            const description = data.task.description || '';
+
+            // 从任务描述中提取学习目标
+            let objectives = [];
+            if (description.includes('学习目标') || description.includes('目标')) {
+                const objMatch = description.match(/(?:学习目标|目标)[：:]\s*([\s\S]*?)(?:\n\n|$)/i);
+                if (objMatch) {
+                    objectives = objMatch[1].split(/[、，；]/).filter(o => o.trim()).map(o => o.trim());
+                }
+            }
+            // 如果没有提取到，使用默认目标
+            if (objectives.length === 0) {
+                objectives = [
+                    '掌握本课程的核心知识点',
+                    '能够理解和应用相关技能',
+                    '完成课程后通过测验考核'
+                ];
+            }
 
             let summaryHtml = '';
             if (summary.length > 0) {
@@ -111,6 +129,8 @@ async function loadTask() {
                 summaryHtml = '<p style="color: #999;">暂无课程大纲</p>';
             }
 
+            let objectivesHtml = objectives.map(obj => `<li>${obj}</li>`).join('');
+
             container.innerHTML = `
                 <div style="max-width: 800px; margin: 0 auto;">
                     <div class="card" style="margin-bottom: 1rem;">
@@ -119,15 +139,12 @@ async function loadTask() {
                             <span class="tag">${data.task.task_type === 'onboarding' ? '入职培训' : '技能提升'}</span>
                             <span style="margin-left: 1rem; color: #999; font-size: 0.875rem;">截止日期：${data.task.deadline || '未设置'}</span>
                         </div>
-                        <p style="color: #666; line-height: 1.6;">${data.task.description || ''}</p>
                     </div>
 
                     <div class="learn-objectives">
                         <h3>🎯 学习目标</h3>
                         <ul>
-                            <li>掌握本课程的核心知识点</li>
-                            <li>能够理解和应用相关技能</li>
-                            <li>完成课程后通过测验考核</li>
+                            ${objectivesHtml}
                         </ul>
                     </div>
 
