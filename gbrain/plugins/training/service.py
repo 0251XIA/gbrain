@@ -128,6 +128,10 @@ class TrainingService:
         """归档任务"""
         return self.update_task_status(task_id, TaskStatus.ARCHIVED.value)
 
+    def delete_task(self, task_id: str) -> bool:
+        """删除任务"""
+        return self.db.delete_training_task(task_id)
+
     def _dict_to_task(self, data: dict) -> TrainingTask:
         quiz_items = []
         if data.get('quiz_items'):

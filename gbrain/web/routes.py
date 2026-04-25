@@ -571,6 +571,13 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         success = service.archive_task(task_id)
         return JSONResponse({"success": success})
 
+    @app.delete("/api/training/admin/task/{task_id}")
+    async def api_delete_task(task_id: str):
+        """删除任务"""
+        service = get_training_service()
+        success = service.delete_task(task_id)
+        return JSONResponse({"success": success})
+
     @app.get("/api/training/knowledge/pages")
     async def api_knowledge_pages():
         """获取知识库所有页面（用于选择来源）"""

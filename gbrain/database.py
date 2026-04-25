@@ -251,6 +251,21 @@ class Database:
             print(f"更新任务状态失败: {e}")
             return False
 
+    def delete_training_task(self, task_id: str) -> bool:
+        """删除任务及其关联数据"""
+        try:
+            with self.get_cursor() as c:
+                # 删除关联的学习进度
+                c.execute("DELETE FROM learning_progress WHERE task_id = ?", (task_id,))
+                # 删除关联的测验结果
+                c.execute("DELETE FROM quiz_results WHERE task_id = ?", (task_id,))
+                # 删除任务
+                c.execute("DELETE FROM training_tasks WHERE id = ?", (task_id,))
+            return True
+        except Exception as e:
+            print(f"删除任务失败: {e}")
+            return False
+
     def insert_learning_progress(self, progress: dict) -> bool:
         """插入学习进度"""
         try:
