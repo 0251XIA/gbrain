@@ -440,6 +440,13 @@ async function generateCourse() {
     const description = document.getElementById('description').value.trim();
     const numChapters = parseInt(document.getElementById('num_chapters').value);
 
+    // 自动检测培训类型
+    const topicLower = (topic + ' ' + description).toLowerCase();
+    let trainingType = 'product';
+    if (/礼仪/.test(topicLower)) trainingType = 'business_etiquette';
+    else if (/销售|话术|客户/.test(topicLower)) trainingType = 'sales_skill';
+    else if (/合规|法规|制度/.test(topicLower)) trainingType = 'compliance';
+
     if (!topic) {
         alert('请输入培训主题');
         return;
@@ -490,7 +497,7 @@ async function generateCourse() {
                 topic,
                 description,
                 num_chapters: numChapters,
-                training_type: 'product',
+                training_type: trainingType,
                 content_source: selectedKbFiles.length > 0 ? selectedKbFiles : []
             }),
             signal: AbortSignal.timeout(timeoutMs)
