@@ -86,6 +86,48 @@ function extractSummary(markdown) {
     return summaryParts;
 }
 
+// 从课件内容中提取学习目标
+function extractObjectives(content) {
+    if (!content) return [];
+
+    const lines = content.split('\n');
+    let inObjectives = false;
+    let objectives = [];
+    let collecting = false;
+    let currentObj = '';
+
+    for (const line of lines) {
+        // 检测目标区域开始
+        if (/#*.*(?:学习|课程)[目标目的]/.test(line)) {
+            inObjectives = true;
+            continue;
+        }
+        // 检测下一个大标题则结束
+        if (inObjectives && /^#{1,3}\s+[^【】]+/.test(line) && !/#.*目标/.test(line)) {
+            if (currentObj.trim()) {
+                objectives.push(currentObj.trim());
+            }
+            break;
+        }
+        if (inObjectives) {
+            // 匹配列表项
+            const listMatch = line.match(/^[-*]\s*(.+)/);
+            if (listMatch) {
+                if (currentObj.trim()) objectives.push(currentObj.trim());
+                currentObj = listMatch[1].trim();
+            } else if (/^\d+[.、]/.test(line.trim())) {
+                // 匹配数字编号
+                if (currentObj.trim()) objectives.push(currentObj.trim());
+                currentObj = line.replace(/^\d+[.、]\s*/, '').trim();
+            } else if (line.trim() && !/^#{1,3}\s*/.test(line)) {
+                currentObj += ' ' + line.trim();
+            }
+        }
+    }
+    if (currentObj.trim()) objectives.push(currentObj.trim());
+    return objectives.slice(0, 5); // 最多5个目标
+}
+
 async function loadTask() {
     try {
         const res = await fetch(`/api/training/task/${taskId}`);
@@ -107,11 +149,13 @@ async function loadTask() {
             const durationMatch = description.match(/(?:学习)?时长[：:]\s*(.+?)(?:\n|$)/i);
             if (durationMatch) duration = durationMatch[1].trim();
 
-            // 从任务描述中提取学习目标
-            let objectives = [];
-            const objMatch = description.match(/(?:学习)?目标[：:]\s*([\s\S]*?)(?=\n\n|$)/i);
-            if (objMatch) {
-                objectives = objMatch[1].split(/[、，；]/).filter(o => o.trim()).map(o => o.trim());
+            // 优先从课件内容提取学习目标，其次从描述，最后用默认
+            let objectives = extractObjectives(content);
+            if (objectives.length === 0) {
+                const objMatch = description.match(/(?:学习)?目标[：:]\s*([\s\S]*?)(?=\n\n|$)/i);
+                if (objMatch) {
+                    objectives = objMatch[1].split(/[、，；]/).filter(o => o.trim()).map(o => o.trim());
+                }
             }
             if (objectives.length === 0) {
                 objectives = ['掌握本课程的核心知识点', '能够理解和应用相关技能', '完成课程后通过测验考核'];
