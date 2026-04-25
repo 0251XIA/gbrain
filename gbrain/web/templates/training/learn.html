@@ -494,7 +494,14 @@ async function loadCourseContent() {
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
         if (data.content) {
-            const rendered = marked.parse(data.content);
+            // 清理内容：移除开篇的元数据描述（主题、受众、需求等）
+            let cleanContent = data.content;
+            // 移除开篇部分的元数据行
+            cleanContent = cleanContent.replace(/^[#]*\s*(?:主题|受众|需求|时长)[：:].*$/gm, '');
+            // 移除"根据XXX"等引用语句
+            cleanContent = cleanContent.replace(/^根据[^，,\n]+[，,]?\s*/gm, '');
+
+            const rendered = marked.parse(cleanContent);
             courseContent.innerHTML = `<div class="markdown-body">${rendered}</div>`;
         } else {
             courseContent.innerHTML = '<p style="color: #999;">暂无课件内容</p>';
