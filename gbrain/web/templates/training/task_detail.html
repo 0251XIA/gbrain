@@ -86,48 +86,40 @@ function extractSummary(markdown) {
     return summaryParts;
 }
 
-// 从讲义内容中提取学习目标（开篇部分的目标内容）
+// 从讲义开篇部分提取学习目标
 function extractObjectives(content) {
     if (!content) return [];
     const lines = content.split('\n');
     let objectives = [];
+    let foundTargetSection = false;
 
-    // 查找"开篇"或"目标"相关章节
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        // 匹配开篇/学习目标/课程目标等标题
-        if (/^#{1,3}\s*(?:开篇|学习目标|课程目标|目标)[\s：:]/.test(line)) {
-            // 收集接下来3-5行的内容作为目标
-            for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-                const l = lines[j];
-                // 遇到下一个标题就停止
-                if (/^#{1,3}\s+[^【】]/.test(l) && !/^#{1,3}\s*(?:开篇|学习目标|课程目标|目标)/.test(l)) break;
-                // 收集列表内容
-                const listMatch = l.match(/^[-*]\s*(.+)/);
-                if (listMatch) {
-                    objectives.push(listMatch[1].trim());
-                } else if (/^\d+[.、]/.test(l.trim())) {
-                    objectives.push(l.replace(/^\d+[.、]\s*/, '').trim());
+
+        // 匹配"学习目标"或"目标"章节
+        if (/^#{1,3}\s*(?:学习)?目标/.test(line)) {
+            foundTargetSection = true;
+            // 查找"完成本培训后，您将能够："或类似表述
+            for (let j = i; j < Math.min(i + 10, lines.length); j++) {
+                if (/完成.+后/.test(lines[j])) {
+                    // 从下一行开始收集列表
+                    for (let k = j + 1; k < Math.min(j + 12, lines.length); k++) {
+                        const l = lines[k];
+                        // 遇到新的#标题就停止
+                        if (/^#{1,3}\s+[^【】]/.test(l)) break;
+                        const listMatch = l.match(/^[-*]\s*(.+)/);
+                        if (listMatch) {
+                            objectives.push(listMatch[1].trim());
+                        }
+                    }
+                    break;
                 }
             }
             break;
         }
     }
 
-    // 如果没找到开篇目标，从开头内容中提取要点（排除场景描述）
-    if (objectives.length === 0) {
-        for (let i = 0; i < Math.min(30, lines.length); i++) {
-            const l = lines[i];
-            // 跳过场景描述段落
-            if (!/^#{1,3}\s*/.test(l) && l.length > 20 && !l.startsWith('-')) continue;
-            const listMatch = l.match(/^[-*]\s*(.+)/);
-            if (listMatch && listMatch[1].length > 5 && listMatch[1].length < 100) {
-                objectives.push(listMatch[1].trim());
-            }
-        }
-    }
-
-    return objectives.slice(0, 4);
+    return objectives.slice(0, 6);
 }
 
 async function loadTask() {
