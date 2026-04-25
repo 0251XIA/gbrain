@@ -19,6 +19,9 @@ from gbrain.database import Database
 # 会话管理
 learning_sessions: dict[str, LearningAgent] = {}
 
+# 状态映射常量
+STATUS_TEXT_MAP = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
+
 
 def register_routes(app: FastAPI, templates: Jinja2Templates):
     """注册所有路由"""
@@ -114,7 +117,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     "task_type": t.task_type.value,
                     "deadline": t.deadline.isoformat() if t.deadline else None,
                     "status": t.status.value,
-                    "status_text": {"draft": "草稿", "published": "已发布", "archived": "已归档"}.get(t.status.value, t.status.value)
+                    "status_text": STATUS_TEXT_MAP.get(t.status.value, t.status.value)
                 }
                 for t in tasks
             ]
@@ -134,7 +137,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     "task_type": t.task_type.value,
                     "deadline": t.deadline.isoformat() if t.deadline else None,
                     "status": t.status.value,
-                    "status_text": {"draft": "草稿", "published": "已发布", "archived": "已归档"}.get(t.status.value, t.status.value)
+                    "status_text": STATUS_TEXT_MAP.get(t.status.value, t.status.value)
                 }
                 for t in tasks
             ]
@@ -219,13 +222,6 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 for q in task.quiz_items
             ]
         })
-
-    @app.post("/api/training/quiz/{progress_id}")
-    async def api_submit_quiz(progress_id: str):
-        """提交测验 API"""
-        # 获取原始请求体
-        body = await api_submit_quiz.__code__
-        return JSONResponse({"success": True, "redirect": f"/training/quiz/result/{progress_id}"})
 
     @app.post("/api/training/quiz/{progress_id}/submit")
     async def api_quiz_submit(progress_id: str, request: Request):

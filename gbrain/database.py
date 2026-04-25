@@ -3,12 +3,15 @@ GBrain 数据库模块 - SQLite + sqlite-vec 向量搜索
 """
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
 from .config import DATA_PATH, VECTOR_DIM
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -175,7 +178,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"插入员工失败: {e}")
+            logger.error(f"插入员工失败: {e}")
             return False
 
     def get_employee(self, employee_id: str) -> Optional[dict]:
@@ -207,7 +210,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"插入培训任务失败: {e}")
+            logger.error(f"插入培训任务失败: {e}")
             return False
 
     def get_training_task(self, task_id: str) -> Optional[dict]:
@@ -248,7 +251,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"更新任务状态失败: {e}")
+            logger.error(f"更新任务状态失败: {e}")
             return False
 
     def delete_training_task(self, task_id: str) -> bool:
@@ -263,7 +266,7 @@ class Database:
                 c.execute("DELETE FROM training_tasks WHERE id = ?", (task_id,))
             return True
         except Exception as e:
-            print(f"删除任务失败: {e}")
+            logger.error(f"删除任务失败: {e}")
             return False
 
     def insert_learning_progress(self, progress: dict) -> bool:
@@ -283,7 +286,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"插入学习进度失败: {e}")
+            logger.error(f"插入学习进度失败: {e}")
             return False
 
     def get_learning_progress(self, progress_id: str) -> Optional[dict]:
@@ -319,12 +322,14 @@ class Database:
             )
             return [dict(row) for row in c.fetchall()]
 
+    ALLOWED_PROGRESS_KEYS = {'state', 'started_at', 'completed_at', 'quiz_score', 'quiz_attempts'}
+
     def update_learning_progress(self, progress_id: str, updates: dict) -> bool:
         """更新学习进度"""
         try:
             set_clauses = []
             values = []
-            for key in ['state', 'started_at', 'completed_at', 'quiz_score', 'quiz_attempts']:
+            for key in ALLOWED_PROGRESS_KEYS:
                 if key in updates:
                     set_clauses.append(f"{key} = ?")
                     values.append(updates[key])
@@ -340,7 +345,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"更新学习进度失败: {e}")
+            logger.error(f"更新学习进度失败: {e}")
             return False
 
     def insert_quiz_result(self, result: dict) -> bool:
@@ -357,7 +362,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"插入测验结果失败: {e}")
+            logger.error(f"插入测验结果失败: {e}")
             return False
 
     def get_quiz_results(self, progress_id: str) -> list[dict]:
@@ -424,7 +429,7 @@ class Database:
                     )
             return True
         except Exception as e:
-            print(f"插入页面失败: {e}")
+            logger.error(f"插入页面失败: {e}")
             return False
 
     def get_page(self, page_id: str) -> Optional[dict]:
@@ -457,7 +462,7 @@ class Database:
                 """)
             return True
         except Exception as e:
-            print(f"向量索引初始化失败: {e}")
+            logger.error(f"向量索引初始化失败: {e}")
             return False
 
     def insert_vector(self, page_id: str, embedding: list[float]) -> bool:
@@ -472,7 +477,7 @@ class Database:
                 )
             return True
         except Exception as e:
-            print(f"向量插入失败: {e}")
+            logger.error(f"向量插入失败: {e}")
             return False
 
     def search_vectors(self, query_embedding: list[float],
@@ -489,7 +494,7 @@ class Database:
                 """, (top_k,))
                 return [(row[0], row[1]) for row in c.fetchall()]
         except Exception as e:
-            print(f"向量搜索失败: {e}")
+            logger.error(f"向量搜索失败: {e}")
             return []
 
     def insert_entity(self, entity_id: str, name: str,
