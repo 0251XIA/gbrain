@@ -507,34 +507,22 @@ async function loadCourseContent() {
     }
 }
 
-// 提取纯讲义内容（移除元数据和无关内容）
+// 提取纯讲义内容（移除元数据行，保留所有讲义章节）
 function extractLectureContent(content) {
     if (!content) return '';
     const lines = content.split('\n');
-    const targetSections = [
-        '开篇', '场景', '模块1', '模块2', '模块3', '模块4', '模块5', '模块6',
-        '商务礼仪的作用', '电话应对', '邮件文书', '第一印象', '商务场景',
-        '5S', '报', '商', '联', '总结', '行动计划', '练习', '案例', '避坑'
+    const result = [];
+    const excludePatterns = [
+        /^[#]*\s*[主题受众需求时长培训]+[：:]/,
+        /^## 基本信息/,
+        /通过本培训，您将掌握/,
+        /本章将介绍.*相关知识和技能/
     ];
-    const excludeKeywords = ['主题：', '受众：', '需求：', '时长：', '培训主题', '培训受众', '## 基本信息'];
-    let result = [];
-    let skipSection = false;
 
     for (const line of lines) {
-        // 检查是否是需要排除的元数据行
-        if (excludeKeywords.some(kw => line.includes(kw))) continue;
-
-        // 检查是否是章节标题
-        const isHeading = /^#{1,3}\s+/.test(line);
-        if (isHeading) {
-            const headingText = line.replace(/^#{1,3}\s*/, '');
-            // 检查是否匹配目标章节
-            const matched = targetSections.some(s => headingText.includes(s) || headingText.startsWith(s));
-            skipSection = !matched;
-            if (!skipSection) result.push(line);
-        } else if (!skipSection) {
-            result.push(line);
-        }
+        // 跳过匹配排除模式的行
+        if (excludePatterns.some(p => p.test(line))) continue;
+        result.push(line);
     }
 
     return result.join('\n');
