@@ -1,0 +1,102 @@
+{% extends "training/base.html" %}
+
+{% block title %}数据看板{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">数据看板</h1>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="text-align: center;">
+        <p style="color: #666; font-size: 0.875rem;">员工总数</p>
+        <p style="font-size: 2.5rem; font-weight: bold; color: #1a1a2e;" id="total-employees">-</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <p style="color: #666; font-size: 0.875rem;">已完成人数</p>
+        <p style="font-size: 2.5rem; font-weight: bold; color: #28a745;" id="completed-count">-</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <p style="color: #666; font-size: 0.875rem;">完成率</p>
+        <p style="font-size: 2.5rem; font-weight: bold; color: #4361ee;" id="completion-rate">-</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <p style="color: #666; font-size: 0.875rem;">平均成绩</p>
+        <p style="font-size: 2.5rem; font-weight: bold; color: #17a2b8;" id="avg-score">-</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">各任务完成情况</h2>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="border-bottom: 2px solid #eee;">
+                <th style="text-align: left; padding: 0.75rem 0;">任务名称</th>
+                <th style="text-align: center; padding: 0.75rem 0;">类型</th>
+                <th style="text-align: center; padding: 0.75rem 0;">总人数</th>
+                <th style="text-align: center; padding: 0.75rem 0;">完成人数</th>
+                <th style="text-align: center; padding: 0.75rem 0;">完成率</th>
+            </tr>
+        </thead>
+        <tbody id="task-stats">
+            <tr><td colspan="5" style="text-align: center; padding: 2rem; color: #999;">加载中...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">未完成员工</h2>
+    <div id="incomplete-list">
+        <p style="color: #999;">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+async function loadDashboard() {
+    try {
+        const res = await fetch('/api/training/dashboard/stats');
+        const data = await res.json();
+
+        document.getElementById('total-employees').textContent = data.total_employees || 0;
+        document.getElementById('completed-count').textContent = data.completed_count || 0;
+        document.getElementById('completion-rate').textContent = ((data.completion_rate || 0) * 100).toFixed(1) + '%';
+        document.getElementById('avg-score').textContent = (data.avg_quiz_score || 0) + '%';
+
+        // 任务统计
+        const tbody = document.getElementById('task-stats');
+        if (data.task_stats && data.task_stats.length > 0) {
+            tbody.innerHTML = data.task_stats.map(t => `
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 0.75rem 0;">${t.task_title}</td>
+                    <td style="text-align: center; padding: 0.75rem 0;">
+                        <span class="tag">${t.task_type === 'onboarding' ? '入职' : '技能'}</span>
+                    </td>
+                    <td style="text-align: center; padding: 0.75rem 0;">${t.total}</td>
+                    <td style="text-align: center; padding: 0.75rem 0;">${t.completed}</td>
+                    <td style="text-align: center; padding: 0.75rem 0;">${t.completion_rate}%</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: #999;">暂无数据</td></tr>';
+        }
+
+        // 未完成列表
+        const incomplete = document.getElementById('incomplete-list');
+        if (data.incomplete_employees && data.incomplete_employees.length > 0) {
+            incomplete.innerHTML = data.incomplete_employees.map(e => `
+                <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee;">
+                    <span>${e.name}（${e.department}）</span>
+                    <span style="color: #999;">${e.task_title} - ${e.state}</span>
+                </div>
+            `).join('');
+        } else {
+            incomplete.innerHTML = '<p style="color: #28a745;">🎉 所有员工已完成培训！</p>';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

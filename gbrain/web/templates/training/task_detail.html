@@ -1,0 +1,156 @@
+{% extends "training/base.html" %}
+
+{% block title %}任务详情{% endblock %}
+
+{% block extra_style %}
+<style>
+.learn-objectives {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+.learn-objectives h3 {
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+}
+.learn-objectives ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+.learn-objectives li {
+    margin-bottom: 0.5rem;
+}
+.course-content {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+.course-content h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
+.course-content h2 { font-size: 1.25rem; color: #444; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #f0f0f0; }
+.course-content h3 { font-size: 1.1rem; color: #555; margin: 1rem 0 0.5rem; }
+.course-content p { line-height: 1.8; color: #555; margin-bottom: 1rem; }
+.course-content ul, .course-content ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+.course-content li { line-height: 1.7; margin-bottom: 0.5rem; color: #555; }
+.course-tip {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="task-detail">
+    <p style="color: #999;">加载中...</p>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const taskId = "{{ task_id }}";
+
+function extractSummary(markdown) {
+    if (!markdown) return '';
+    const lines = markdown.split('\n');
+    const summaryParts = [];
+    let currentSection = '';
+    let currentContent = [];
+
+    for (const line of lines) {
+        const h2Match = line.match(/^##\s+(.+)/);
+        if (h2Match) {
+            if (currentSection) {
+                const firstPara = currentContent.find(l => l.trim() && !l.startsWith('-') && !l.startsWith('*'));
+                if (firstPara) {
+                    summaryParts.push({ section: currentSection, desc: firstPara.slice(0, 100) + (firstPara.length > 100 ? '...' : '') });
+                }
+            }
+            currentSection = h2Match[1];
+            currentContent = [];
+        } else if (currentSection) {
+            currentContent.push(line);
+        }
+    }
+    if (currentSection) {
+        const firstPara = currentContent.find(l => l.trim() && !l.startsWith('-') && !l.startsWith('*'));
+        if (firstPara) {
+            summaryParts.push({ section: currentSection, desc: firstPara.slice(0, 100) + (firstPara.length > 100 ? '...' : '') });
+        }
+    }
+    return summaryParts;
+}
+
+async function loadTask() {
+    try {
+        const res = await fetch(`/api/training/task/${taskId}`);
+        const data = await res.json();
+        const container = document.getElementById('task-detail');
+
+        if (data.task) {
+            const content = data.task.content || '';
+            const summary = extractSummary(content);
+
+            let summaryHtml = '';
+            if (summary.length > 0) {
+                summaryHtml = summary.map((s, i) => `
+                    <div style="display: flex; align-items: flex-start; margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 8px;">
+                        <span style="background: #4361ee; color: white; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; margin-right: 0.75rem; flex-shrink: 0;">${i + 1}</span>
+                        <div>
+                            <div style="font-weight: bold; color: #333; margin-bottom: 0.25rem;">${s.section}</div>
+                            <div style="color: #666; font-size: 0.875rem;">${s.desc}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                summaryHtml = '<p style="color: #999;">暂无课程大纲</p>';
+            }
+
+            container.innerHTML = `
+                <div style="max-width: 800px; margin: 0 auto;">
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h1 style="font-size: 1.5rem; margin-bottom: 0.75rem;">${data.task.title}</h1>
+                        <div style="margin-bottom: 0.75rem;">
+                            <span class="tag">${data.task.task_type === 'onboarding' ? '入职培训' : '技能提升'}</span>
+                            <span style="margin-left: 1rem; color: #999; font-size: 0.875rem;">截止日期：${data.task.deadline || '未设置'}</span>
+                        </div>
+                        <p style="color: #666; line-height: 1.6;">${data.task.description || ''}</p>
+                    </div>
+
+                    <div class="learn-objectives">
+                        <h3>🎯 学习目标</h3>
+                        <ul>
+                            <li>掌握本课程的核心知识点</li>
+                            <li>能够理解和应用相关技能</li>
+                            <li>完成课程后通过测验考核</li>
+                        </ul>
+                    </div>
+
+                    <div class="course-content">
+                        <h2 style="margin-bottom: 1rem;">📋 课程大纲</h2>
+                        <div>${summaryHtml}</div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <a href="/training/task/${taskId}/learn" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">
+                            开始学习 →
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = '<p style="color: #999;">任务不存在</p>';
+        }
+    } catch (e) {
+        document.getElementById('task-detail').innerHTML = '<p style="color: #999;">加载失败</p>';
+    }
+}
+
+loadTask();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "training/base.html" %}
+
+{% block title %}首页{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1 style="font-size: 1.75rem; margin-bottom: 1rem;">欢迎使用 GBrain 培训平台</h1>
+    <p style="color: #666; line-height: 1.6;">
+        基于企业知识库的智能培训系统，为新员工入职培训和岗位技能提升提供一站式解决方案。
+    </p>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">我的学习任务</h2>
+    <div id="task-list">
+        <p style="color: #999;">加载中...</p>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+    <div class="card">
+        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">📚 学习中</h3>
+        <p style="font-size: 2rem; font-weight: bold; color: #4361ee;" id="learning-count">-</p>
+    </div>
+    <div class="card">
+        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">✅ 已完成</h3>
+        <p style="font-size: 2rem; font-weight: bold; color: #28a745;" id="completed-count">-</p>
+    </div>
+    <div class="card">
+        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">🎯 平均成绩</h3>
+        <p style="font-size: 2rem; font-weight: bold; color: #17a2b8;" id="avg-score">-</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+async function loadStats() {
+    try {
+        const res = await fetch('/api/training/dashboard/stats');
+        const data = await res.json();
+        document.getElementById('learning-count').textContent = '-';
+        document.getElementById('completed-count').textContent = data.completed_count || 0;
+        document.getElementById('avg-score').textContent = data.avg_quiz_score ? data.avg_quiz_score + '%' : '-';
+    } catch (e) {
+        console.error('加载统计数据失败', e);
+    }
+}
+
+async function loadTasks() {
+    try {
+        const res = await fetch('/api/training/tasks');
+        const data = await res.json();
+        const list = document.getElementById('task-list');
+        if (data.tasks && data.tasks.length > 0) {
+            list.innerHTML = data.tasks.map(t => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #eee;">
+                    <div>
+                        <strong>${t.title}</strong>
+                        <span class="tag" style="margin-left: 0.5rem;">${t.task_type === 'onboarding' ? '入职培训' : '技能提升'}</span>
+                    </div>
+                    <a href="/training/task/${t.id}" class="btn">查看</a>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = '<p style="color: #999;">暂无培训任务</p>';
+        }
+    } catch (e) {
+        document.getElementById('task-list').innerHTML = '<p style="color: #999;">加载失败</p>';
+    }
+}
+
+loadStats();
+loadTasks();
+</script>
+{% endblock %}

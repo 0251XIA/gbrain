@@ -1,0 +1,669 @@
+{% extends "training/base.html" %}
+
+{% block title %}管理后台{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">管理后台</h1>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">📚 AI 智能创建培训任务</h2>
+
+        <!-- 步骤指示器 -->
+        <div style="display: flex; margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+            <div class="step-indicator active" id="step1" style="flex: 1; text-align: center;">
+                <div class="step-number">1</div>
+                <div class="step-label">上传文档</div>
+            </div>
+            <div style="width: 2rem; display: flex; align-items: center; justify-content: center; color: #ccc;">→</div>
+            <div class="step-indicator" id="step2" style="flex: 1; text-align: center;">
+                <div class="step-number">2</div>
+                <div class="step-label">配置参数</div>
+            </div>
+            <div style="width: 2rem; display: flex; align-items: center; justify-content: center; color: #ccc;">→</div>
+            <div class="step-indicator" id="step3" style="flex: 1; text-align: center;">
+                <div class="step-number">3</div>
+                <div class="step-label">生成课件</div>
+            </div>
+            <div style="width: 2rem; display: flex; align-items: center; justify-content: center; color: #ccc;">→</div>
+            <div class="step-indicator" id="step4" style="flex: 1; text-align: center;">
+                <div class="step-number">4</div>
+                <div class="step-label">创建任务</div>
+            </div>
+        </div>
+
+        <style>
+            .step-indicator { opacity: 0.5; }
+            .step-indicator.active { opacity: 1; }
+            .step-indicator .step-number {
+                width: 28px; height: 28px; border-radius: 50%;
+                background: #ddd; color: white;
+                display: inline-flex; align-items: center; justify-content: center;
+                font-weight: bold; margin-bottom: 0.25rem;
+            }
+            .step-indicator.active .step-number { background: #4361ee; }
+            .step-indicator .step-label { font-size: 0.75rem; color: #666; }
+        </style>
+
+        <!-- 步骤1：上传文档 -->
+        <div id="section-upload" class="workflow-section">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem;">步骤1：选择培训资料来源</h3>
+
+            <div style="margin-bottom: 1rem;">
+                <h4 style="font-size: 0.875rem; margin-bottom: 0.5rem;">📤 上传新文档（可选）</h4>
+                <p style="color: #666; font-size: 0.75rem; margin-bottom: 0.75rem;">
+                    支持 PDF、DOCX、PPT、TXT、Markdown 格式。上传后将自动转为 Markdown 并存入知识库。
+                </p>
+
+                <div style="border: 2px dashed #ddd; border-radius: 8px; padding: 1.5rem; text-align: center; margin-bottom: 1rem;"
+                     id="drop-zone"
+                     ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <input type="file" id="file-input" multiple accept=".pdf,.docx,.pptx,.txt,.md" style="display: none;" onchange="handleFileSelect(event)">
+                    <div style="color: #666;">
+                        <p style="font-size: 1.5rem; margin-bottom: 0.25rem;">📄</p>
+                        <p style="font-size: 0.875rem;">拖拽文件到此处，或 <a href="#" onclick="document.getElementById('file-input').click(); return false;" style="color: #4361ee;">点击选择文件</a></p>
+                    </div>
+                </div>
+
+                <style>
+                    #drop-zone.dragover { border-color: #4361ee; background: #e8f4fd; }
+                </style>
+
+                <div id="upload-status" style="display: none; padding: 0.75rem; background: #f8f9fa; border-radius: 6px; margin-bottom: 0.75rem;">
+                    <p id="upload-text" style="color: #666; font-size: 0.875rem;">上传中...</p>
+                </div>
+
+                <div id="uploaded-files" style="margin-bottom: 0.5rem;"></div>
+            </div>
+
+            <div style="margin-bottom: 1rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                <h4 style="font-size: 0.875rem; margin-bottom: 0.5rem;">📁 从知识库选择（可多选）</h4>
+                <div id="kb-files-section" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 0.5rem; background: #f8f9fa;">
+                    <p style="color: #999; font-size: 0.875rem; text-align: center; padding: 1rem;">加载中...</p>
+                </div>
+                <p style="color: #666; font-size: 0.75rem; margin-top: 0.25rem;">按住 Ctrl/Cmd 多选。上传的新文件会自动选中。</p>
+            </div>
+
+            <button type="button" id="btn-next-to-config" class="btn" style="width: 100%;" onclick="goToStep(2)" disabled>
+                下一步：配置参数 →
+            </button>
+        </div>
+
+        <!-- 步骤2：配置参数 -->
+        <div id="section-config" class="workflow-section" style="display: none;">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem;">步骤2：配置生成参数</h3>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">培训主题</label>
+                <input type="text" id="topic" placeholder="例如：新员工入职培训、销售技巧培训"
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">需求描述</label>
+                <textarea id="description" rows="3" placeholder="描述具体需求，例如：包含公司制度、财务流程、考勤规定等内容"
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;"></textarea>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                    📁 已选择的知识文件
+                </label>
+                <select id="kb-file-list" multiple size="5" style="width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 0.5rem; background: #f8f9fa;">
+                    <option value="" disabled>请在上一步选择或上传文件</option>
+                </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">章节数量</label>
+                    <select id="num_chapters" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="2">2 章节</option>
+                        <option value="3">3 章节</option>
+                        <option value="4" selected>4 章节</option>
+                        <option value="5">5 章节</option>
+                        <option value="6">6 章节</option>
+                        <option value="7">7 章节</option>
+                        <option value="8">8 章节</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="btn" style="flex: 1;" onclick="goToStep(1)">← 上一步</button>
+                <button type="button" id="btn-generate" class="btn btn-primary" style="flex: 2;" onclick="generateCourse()">
+                    🚀 生成课件
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤3：预览课件 -->
+        <div id="section-preview" class="workflow-section" style="display: none;">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem;">步骤3：预览并编辑课件</h3>
+
+            <div id="generate-status" style="display: none; padding: 1rem; background: #f8f9fa; border-radius: 8px; margin-bottom: 1rem;">
+                <p id="status-text" style="color: #666; font-size: 0.875rem;">生成中...</p>
+            </div>
+
+            <div id="preview-section" style="display: none; margin-bottom: 1rem;">
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">📋 课件内容（可编辑）</label>
+                    <textarea id="preview-content" rows="20" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.6;"></textarea>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="btn" style="flex: 1;" onclick="goToStep(2)">← 重新生成</button>
+                <button type="button" id="btn-to-create" class="btn btn-primary" style="flex: 2;" onclick="goToStep(4)" disabled>
+                    下一步：创建任务 →
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤4：创建任务 -->
+        <div id="section-create" class="workflow-section" style="display: none;">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem;">步骤4：确认并创建任务</h3>
+
+            <form id="create-task-form">
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">任务标题</label>
+                    <input type="text" name="title" id="task-title" required
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">任务描述</label>
+                    <textarea name="description" id="task-description" rows="2"
+                        style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;"></textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">任务类型</label>
+                        <select name="task_type" id="task-type" required
+                            style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="onboarding">入职培训</option>
+                            <option value="skill">技能提升</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">截止日期</label>
+                        <input type="date" name="deadline" id="task-deadline" required
+                            style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                    </div>
+                </div>
+
+                <input type="hidden" name="content" id="task-content" value="">
+                <input type="hidden" name="content_source" id="task-content-source" value="[]">
+
+                <div style="display: flex; gap: 1rem;">
+                    <button type="button" class="btn" style="flex: 1;" onclick="goToStep(3)">← 上一步</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 2;">✅ 创建任务</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-bottom: 1rem;">任务管理</h2>
+        <div id="task-management">
+            <p style="color: #999;">加载中...</p>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 2rem;">
+    <h2 style="margin-bottom: 1rem;">员工管理</h2>
+    <div id="employee-management">
+        <p style="color: #999;">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let uploadedFiles = [];  // 存储已上传文件 {page_id, title, filename}
+let selectedKbFiles = [];  // 用户选择的知识库文件
+let kbFileTitles = {};  // 知识库文件标题映射 {page_id: title}
+let generatedContent = '';
+let generatedQuizItems = [];
+let generatedSearchResults = [];
+
+function goToStep(step) {
+    // 隐藏所有步骤
+    document.querySelectorAll('.workflow-section').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
+
+    // 显示目标步骤
+    document.getElementById(`section-${['upload', 'config', 'preview', 'create'][step - 1]}`).style.display = 'block';
+    document.getElementById(`step${step}`).classList.add('active');
+
+    // 进入步骤1时，加载知识库文件列表
+    if (step === 1) {
+        loadKbFiles();
+    }
+    // 进入步骤2时，更新知识库文件列表（仅显示本次上传的）
+    if (step === 2) {
+        updateKbFileList();
+    }
+    // 进入步骤4时，同步编辑后的课件内容
+    if (step === 4) {
+        // 同步编辑后的课件内容
+        const previewContent = document.getElementById('preview-content');
+        document.getElementById('task-content').value = previewContent.value;
+    }
+}
+
+// 处理文件选择（点击选择文件）
+function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+        uploadFiles(files);
+    }
+    // 清空 input 以便相同文件可以再次选择
+    event.target.value = '';
+}
+
+// 处理拖拽文件放下
+function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.classList.remove('dragover');
+
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+        uploadFiles(files);
+    }
+}
+
+// 处理拖拽悬停
+function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.classList.add('dragover');
+}
+
+// 处理拖拽离开
+function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.classList.remove('dragover');
+}
+
+function loadKbFiles() {
+    // 加载知识库所有页面
+    fetch('/api/training/knowledge/pages')
+        .then(res => res.json())
+        .then(data => {
+            const section = document.getElementById('kb-files-section');
+            if (data.pages && data.pages.length > 0) {
+                // 存储标题映射
+                data.pages.forEach(p => {
+                    kbFileTitles[p.id] = p.title || '(无标题)';
+                });
+                section.innerHTML = data.pages.map(p => `
+                    <label style="display: flex; align-items: center; padding: 0.5rem; cursor: pointer; border-bottom: 1px solid #eee;">
+                        <input type="checkbox" value="${p.id}" onchange="toggleKbFileFromUpload(this)" style="margin-right: 0.5rem;">
+                        <span style="flex: 1;">${p.title || '(无标题)'}</span>
+                        <span style="font-size: 0.7rem; color: #999; margin-right: 0.5rem;">${p.category || ''}</span>
+                    </label>
+                `).join('');
+            } else {
+                section.innerHTML = '<p style="color: #999; font-size: 0.875rem; text-align: center; padding: 1rem;">知识库暂无内容</p>';
+            }
+        })
+        .catch(err => {
+            document.getElementById('kb-files-section').innerHTML = '<p style="color: #999; font-size: 0.875rem;">加载失败</p>';
+        });
+}
+
+function toggleKbFileFromUpload(checkbox) {
+    const pageId = checkbox.value;
+    if (checkbox.checked) {
+        if (!selectedKbFiles.includes(pageId)) {
+            selectedKbFiles.push(pageId);
+        }
+    } else {
+        selectedKbFiles = selectedKbFiles.filter(id => id !== pageId);
+    }
+    // 更新下一步按钮状态
+    updateNextButton();
+}
+
+function updateNextButton() {
+    const btn = document.getElementById('btn-next-to-config');
+    btn.disabled = !(selectedKbFiles.length > 0 || uploadedFiles.length > 0);
+}
+
+function updateKbFileList() {
+    const kbList = document.getElementById('kb-file-list');
+    kbList.innerHTML = '';
+
+    // 本次上传的文件（自动选中，不可取消）
+    if (uploadedFiles.length > 0) {
+        const uploadGroup = document.createElement('optgroup');
+        uploadGroup.label = '本次上传';
+        uploadedFiles.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f.page_id;
+            opt.text = f.title || f.filename;
+            opt.selected = true;
+            uploadGroup.appendChild(opt);
+        });
+        kbList.appendChild(uploadGroup);
+    }
+
+    // 已选择的知识库文件
+    const kbSelected = selectedKbFiles.filter(id => !uploadedFiles.find(f => f.page_id === id));
+    if (kbSelected.length > 0) {
+        const kbGroup = document.createElement('optgroup');
+        kbGroup.label = '知识库';
+        kbSelected.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.text = kbFileTitles[id] || id;
+            opt.selected = true;
+            kbGroup.appendChild(opt);
+        });
+        kbList.appendChild(kbGroup);
+    }
+
+    if (kbList.options.length === 0) {
+        const opt = document.createElement('option');
+        opt.text = '请在上一步选择或上传文件';
+        opt.disabled = true;
+        kbList.appendChild(opt);
+    }
+}
+
+async function uploadFiles(files) {
+    const statusDiv = document.getElementById('upload-status');
+    const statusText = document.getElementById('upload-text');
+    const filesDiv = document.getElementById('uploaded-files');
+
+    statusDiv.style.display = 'block';
+    statusText.textContent = `正在上传 ${files.length} 个文件...`;
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
+
+    try {
+        const res = await fetch('/api/training/admin/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            let successCount = 0;
+            let html = '<h4 style="font-size: 0.875rem; margin-bottom: 0.5rem;">已上传并转换的文件：</h4>';
+            data.results.forEach(r => {
+                if (r.success) {
+                    successCount++;
+                    uploadedFiles.push({page_id: r.page_id, title: r.title, filename: r.filename});
+                    html += `<div style="padding: 0.5rem; background: #d4edda; border-radius: 4px; margin-bottom: 0.5rem;">
+                        <strong>✅ ${r.filename}</strong>
+                        <p style="font-size: 0.75rem; color: #666; margin: 0.25rem 0 0;">${r.title}</p>
+                    </div>`;
+                } else {
+                    html += `<div style="padding: 0.5rem; background: #f8d7da; border-radius: 4px; margin-bottom: 0.5rem;">
+                        <strong>❌ ${r.filename}</strong>: ${r.error}
+                    </div>`;
+                }
+            });
+
+            filesDiv.innerHTML = html;
+            statusText.textContent = `成功上传 ${successCount}/${files.length} 个文件`;
+
+            if (successCount > 0) {
+                // 新上传的文件自动添加到 selectedKbFiles
+                data.results.forEach(r => {
+                    if (r.success && !selectedKbFiles.includes(r.page_id)) {
+                        selectedKbFiles.push(r.page_id);
+                    }
+                });
+                updateNextButton();
+            }
+        }
+    } catch (e) {
+        statusText.textContent = '上传失败: ' + e.message;
+    }
+}
+
+async function generateCourse() {
+    const topic = document.getElementById('topic').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const numChapters = parseInt(document.getElementById('num_chapters').value);
+
+    if (!topic) {
+        alert('请输入培训主题');
+        return;
+    }
+
+    const statusDiv = document.getElementById('generate-status');
+    const statusText = document.getElementById('status-text');
+    const previewSection = document.getElementById('preview-section');
+    const previewContent = document.getElementById('preview-content');
+    const generateBtn = document.getElementById('btn-generate');
+    const btnToCreate = document.getElementById('btn-to-create');
+
+    // 重置状态
+    statusDiv.style.display = 'block';
+    statusDiv.style.background = '#fff3cd';
+    previewSection.style.display = 'none';
+    generateBtn.disabled = true;
+    generateBtn.textContent = '生成中...';
+    btnToCreate.disabled = true;
+
+    // 进度提示数组
+    const progressMsgs = [
+        '正在连接AI服务...',
+        '正在检索知识库内容...',
+        '正在构建讲义大纲...',
+        'AI正在生成讲义内容（可能需要2-5分钟）...',
+        '内容生成中，请耐心等待...'
+    ];
+    let progressIdx = 0;
+    const progressTimer = setInterval(() => {
+        progressIdx = (progressIdx + 1) % progressMsgs.length;
+        statusText.textContent = progressMsgs[progressIdx];
+    }, 5000);
+    statusText.textContent = progressMsgs[0];
+
+    // 设置超时
+    const timeoutMs = 300000; // 5分钟
+    const timeoutTimer = setTimeout(() => {
+        clearInterval(progressTimer);
+        statusText.textContent = '⚠️ 生成时间较长，AI仍在思考中...';
+    }, 60000);
+
+    try {
+        const genRes = await fetch('/api/training/admin/course/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                topic,
+                description,
+                num_chapters: numChapters,
+                training_type: 'product',
+                content_source: selectedKbFiles.length > 0 ? selectedKbFiles : []
+            }),
+            signal: AbortSignal.timeout(timeoutMs)
+        });
+
+        clearTimeout(timeoutTimer);
+        clearInterval(progressTimer);
+
+        if (!genRes.ok) {
+            throw new Error(`网络错误: ${genRes.status} ${genRes.statusText}`);
+        }
+
+        const genData = await genRes.json();
+
+        if (!genData.success) {
+            const errMsg = genData.error || '未知错误';
+            throw new Error(errMsg);
+        }
+
+        generatedContent = genData.content;
+
+        // 显示预览
+        previewContent.value = generatedContent;
+        previewSection.style.display = 'block';
+
+        statusText.textContent = '✅ 课件生成成功！';
+        statusDiv.style.background = '#d4edda';
+        goToStep(3);
+        btnToCreate.disabled = false;
+
+        // 填充创建表单
+        document.getElementById('task-title').value = topic;
+        document.getElementById('task-description').value = description;
+        document.getElementById('task-content').value = previewContent.value;
+        document.getElementById('task-content-source').value = JSON.stringify(selectedKbFiles);
+
+        // 设置截止日期为 7 天后
+        const deadline = new Date();
+        deadline.setDate(deadline.getDate() + 7);
+        document.getElementById('task-deadline').value = deadline.toISOString().split('T')[0];
+
+    } catch (e) {
+        clearTimeout(timeoutTimer);
+        clearInterval(progressTimer);
+
+        let errMsg = e.message || '生成失败';
+        if (errMsg.includes('timeout') || errMsg.includes('Timeout')) {
+            errMsg = '生成超时（5分钟），AI服务响应过慢，请减少章节数量或稍后重试';
+        } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+            errMsg = '网络连接失败，请检查网络后重试';
+        }
+        statusText.textContent = '❌ 生成失败: ' + errMsg;
+        statusDiv.style.background = '#f8d7da';
+        console.error('Course generation error:', e);
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = '🚀 生成课件';
+    }
+}
+
+// 创建任务表单提交
+document.getElementById('create-task-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const data = {
+        title: formData.get('title'),
+        description: formData.get('description'),
+        task_type: formData.get('task_type'),
+        deadline: formData.get('deadline'),
+        content: document.getElementById('task-content').value,
+        content_source: JSON.parse(document.getElementById('task-content-source').value || '[]'),
+        auto_generate: false
+    };
+
+    try {
+        const res = await fetch('/api/training/admin/task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            alert('任务创建成功！');
+            // 重置
+            location.reload();
+        } else {
+            alert('创建失败: ' + (result.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('创建失败');
+    }
+});
+
+// 加载管理数据
+async function loadAdminData() {
+    try {
+        const [tasksRes, employeesRes] = await Promise.all([
+            fetch('/api/training/admin/tasks'),
+            fetch('/api/training/employees')
+        ]);
+        const tasksData = await tasksRes.json();
+        const employeesData = await employeesRes.json();
+
+        // 任务管理
+        const taskMgmt = document.getElementById('task-management');
+        if (tasksData.tasks && tasksData.tasks.length > 0) {
+            taskMgmt.innerHTML = tasksData.tasks.map(t => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #eee;">
+                    <div>
+                        <strong>${t.title}</strong>
+                        <span class="tag" style="margin-left: 0.5rem;">${t.task_type === 'onboarding' ? '入职' : '技能'}</span>
+                        <span class="status-badge ${'status-' + (t.status === 'published' ? 'in-progress' : t.status === 'archived' ? 'completed' : 'pending')}">${t.status_text}</span>
+                    </div>
+                    <div>
+                        ${t.status === 'draft' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="publishTask('${t.id}')">发布</button>` : ''}
+                        ${t.status === 'published' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="archiveTask('${t.id}')">归档</button>` : ''}
+                        ${t.status === 'archived' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="publishTask('${t.id}')">重新发布</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            taskMgmt.innerHTML = '<p style="color: #999;">暂无任务</p>';
+        }
+
+        // 员工管理
+        const empMgmt = document.getElementById('employee-management');
+        if (employeesData.employees && employeesData.employees.length > 0) {
+            empMgmt.innerHTML = `
+                <table style="width: 100%;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #eee;">
+                            <th style="text-align: left; padding: 0.5rem 0;">姓名</th>
+                            <th style="text-align: left; padding: 0.5rem 0;">部门</th>
+                            <th style="text-align: left; padding: 0.5rem 0;">岗位</th>
+                            <th style="text-align: center; padding: 0.5rem 0;">角色</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${employeesData.employees.map(e => `
+                            <tr style="border-bottom: 1px solid #eee;">
+                                <td style="padding: 0.5rem 0;">${e.name}</td>
+                                <td style="padding: 0.5rem 0;">${e.department}</td>
+                                <td style="padding: 0.5rem 0;">${e.position}</td>
+                                <td style="text-align: center; padding: 0.5rem 0;">${e.role}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        } else {
+            empMgmt.innerHTML = '<p style="color: #999;">暂无员工数据</p>';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function publishTask(taskId) {
+    fetch(`/api/training/admin/task/${taskId}/publish`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => data.success && loadAdminData());
+}
+
+function archiveTask(taskId) {
+    fetch(`/api/training/admin/task/${taskId}/archive`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => data.success && loadAdminData());
+}
+
+// 初始化
+loadAdminData();
+goToStep(1);
+</script>
+{% endblock %}
