@@ -1,6 +1,6 @@
 import re
+import warnings
 from dataclasses import dataclass
-from typing import Literal
 from .models import ParsedPrompt, StyleType
 
 
@@ -177,7 +177,6 @@ class PromptParser:
         }
         result = style_map.get(style, None)
         if result is None:
-            import warnings
             warnings.warn(f"未知风格值 '{style}'，已默认设置为'专业严谨'")
             result = '专业严谨'
         return result

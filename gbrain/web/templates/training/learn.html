@@ -403,7 +403,12 @@ function parseSSELine(line) {
     const data = line.slice(6).trim();
     if (data === '[DONE]') return { done: true };
     try {
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // 如果是字符串（欢迎消息），包装成对象
+        if (typeof parsed === 'string') {
+            return { content: parsed };
+        }
+        return parsed;
     } catch (e) {
         return { content: data };
     }
@@ -415,22 +420,63 @@ async function initSession() {
         const res = await fetch(`/api/training/learn/${progressId}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'start' })
+            body: JSON.stringify({ action: 'start', progress_id: progressId })
         });
-        const data = await res.json();
-        sessionId = data.session_id;
+
+        // 解析 SSE 流
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let welcomeReceived = false;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const parsed = parseSSELine(line);
+                if (parsed && parsed.content) {
+                    addMessage(parsed.content, 'ai');
+                    welcomeReceived = true;
+                }
+                if (parsed && parsed.type === 'progress') {
+                    // 更新进度
+                    if (parsed.stage) {
+                        stageTag.textContent = getStageName(parsed.stage);
+                    }
+                }
+            }
+        }
 
         // 加载课件内容
         await loadCourseContent();
 
-        // 发送欢迎消息
-        if (data.welcome_message) {
-            addMessage(data.welcome_message, 'ai');
+        // 自动发送"开始"来启动学习
+        if (welcomeReceived) {
+            setTimeout(() => {
+                sendMessage('开始');
+            }, 500);
         }
+
     } catch (e) {
         console.error('初始化失败:', e);
         addMessage('抱歉，连接失败了。请刷新页面重试。', 'ai');
     }
+}
+
+function getStageName(stage) {
+    const names = {
+        'tour': '导览阶段',
+        'q_and_a': '问答阶段',
+        'quiz': '测验阶段',
+        'summary': '总结阶段',
+        'completed': '已完成'
+    };
+    return names[stage] || stage;
 }
 
 // 加载课件内容
@@ -461,10 +507,17 @@ async function loadCourseContent() {
 
 // 发送消息
 async function sendMessage(message) {
-    if (!message.trim() || !sessionId) return;
+    if (!message.trim()) return;
 
-    // 显示用户消息
-    addMessage(message, 'user');
+    // 检查是否是开始学习触发词
+    const startTriggers = ['开始', '开始学习', '学习', 'start'];
+    const isStartTrigger = startTriggers.includes(message.trim());
+
+    // 如果不是触发词，显示用户消息
+    if (!isStartTrigger) {
+        addMessage(message, 'user');
+    }
+
     chatInput.value = '';
     chatSendBtn.disabled = true;
 
@@ -519,8 +572,8 @@ async function sendMessage(message) {
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 
-                if (parsed.stage) {
-                    stageTag.textContent = parsed.stage;
+                if (parsed.metadata?.stage) {
+                    stageTag.textContent = getStageName(parsed.metadata.stage);
                 }
             }
         }

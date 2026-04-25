@@ -29,7 +29,7 @@ def call_llm(prompt: str, system_prompt: str = "", max_retries: int = 3) -> str:
                 f"{MINIMAX_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json=payload,
-                timeout=180
+                timeout=300
             )
             if response.status_code == 429:
                 # Rate limit - wait and retry
@@ -112,52 +112,29 @@ class LectureGenerator:
 
     def _generate_lecture(self, parsed: ParsedPrompt, integrated: IntegratedContent, knowledge_context: str, training_type: str) -> str:
         """生成培训讲义"""
-        # 构建需求描述文本
-        description_text = parsed.description if parsed.description else "\n".join(f"{i+1}. {obj}" for i, obj in enumerate(parsed.objectives))
-
-        # 构建明确的任务指令（不是占位符模板）
         task_instructions = self._build_lecture_instructions(parsed, integrated, training_type)
 
-        prompt = f"""# 任务：生成培训讲义
+        prompt = f"""生成一份关于「{parsed.topic}」的培训讲义。
 
-## 基本信息
-- 主题：{parsed.topic}
-- 受众：{parsed.audience}
-- 岗位：{parsed.position}
-- 行业：{parsed.industry}
-- 时长：{parsed.duration}
-- 风格：{parsed.style}
+受众：{parsed.audience}
+时长：{parsed.duration}
 
-## 需求描述（必须严格按照以下要求生成）
-{description_text}
-
-## 知识库内容（用于补充和验证，禁止编造，可参考使用）
+知识库内容：
 {knowledge_context}
 
-{task_instructions}
+结构：{task_instructions}
 
-## 输出要求
-1. 严格遵循"需求描述"中的所有要求，不得遗漏
-2. 每个章节必须有实质性内容，不能只写标题
-3. 案例、练习题要具体可执行
-4. 语言专业简洁，符合成人学习特点
+【重要】输出格式必须遵循：
+1. 直接以「## 开篇」作为开头
+2. 不要输出任何「主题：」「受众：」「需求：」「描述：」「根据XXX」等字样
+3. 只输出纯讲义Markdown内容"""
 
-直接输出 Markdown 格式讲义内容："""
-
-        system_prompt = """你是一个企业培训课件生成专家。
-
-【重要禁止事项】
-- 禁止重复输出"培训目标"、"课程结构"等已在输入中存在的标题
-- 禁止输出类似"本章将介绍..."的空洞章节描述
-- 禁止编造知识库中不存在的具体内容
-
-【正确做法】
-1. 严格基于"知识库内容"中的真实信息生成讲义
-2. 每个章节必须有实质性内容（概念解释、操作步骤、案例等）
-3. 案例要具体可执行，练习题要有标准答案
-4. 语言专业简洁，符合成人学习特点
-
-当知识库内容不足以支撑某个模块时，使用通用的商务礼仪知识补充，但不要留空章节。"""
+        system_prompt = """你是企业培训专家。
+【强制要求】
+- 输出必须直接以「## 开篇」开头，不要有任何前缀说明
+- 禁止输出「主题：」「受众：」「需求：」「描述：」「根据XXX」「以下为XXX」等字样
+- 禁止复制输入的原文
+- 只输出纯讲义内容，每个章节必须有实质性内容"""
 
         try:
             result = call_llm(prompt, system_prompt)
@@ -170,63 +147,22 @@ class LectureGenerator:
     def _build_lecture_instructions(self, parsed: ParsedPrompt, integrated: IntegratedContent, training_type: str) -> str:
         """构建讲义生成指令"""
         type_specific = self._get_type_specific_instructions(training_type)
-
         module_list = list(integrated.module_contents.keys())
         modules_instruction = ""
         if module_list:
-            modules_instruction = f"""
-### 模块章节
-必须包含以下 {len(module_list)} 个模块：
-"""
-            for i, module in enumerate(module_list, 1):
-                modules_instruction += f"{i}. {module}\n"
+            modules_instruction = "模块：" + "、".join(module_list)
 
-        return f"""## 内容结构要求
-
-### 开篇
-- 场景引入：基于受众的实际业务场景，描述一个具体情境
-- 学习目标：明确本讲义的预期学习成果
-
-{type_specific}
-
-{modules_instruction}
-
-### 收尾
-- 总结回顾：梳理核心要点
-- 行动计划：提供可操作的实践建议
-"""
+        return f"""结构：开篇（场景+目标）| {type_specific} | {modules_instruction} | 总结"""
 
     def _get_type_specific_instructions(self, training_type: str) -> str:
         """根据培训类型返回特定的内容要求"""
         templates = {
-            "compliance": """### 合规要点（必须包含）
-- 法规背景：相关法律法规概述
-- 规则讲解：核心合规知识点
-- 案例分析：合规/违规真实案例对比
-- 避坑指南：✅ 合规做法 / ❌ 违规做法
-- 即时练习：场景判断题""",
-            "sales_skill": """### 销售技能要点（必须包含）
-- 场景引入：真实销售场景
-- 技能方法：核心销售技能点
-- 话术示范：可落地的话术模板
-- 案例分析：成功/失败案例对比
-- 避坑指南：✅ 正确做法 / ❌ 错误做法
-- 即时练习：场景模拟演练""",
-            "product": """### 产品知识要点（必须包含）
-- 产品功能：核心功能介绍
-- 客户价值：解决什么问题
-- 使用场景：实际应用场景
-- 案例佐证：公司真实案例
-- 避坑指南：✅ 正确做法 / ❌ 错误做法
-- 即时练习：产品演示模拟""",
-            "business_etiquette": """### 商务礼仪要点（必须包含）
-- 基本原则：礼仪的核心价值和作用
-- 行为规范：具体的行为标准和要求
-- 案例分析：正面/反面案例对比
-- 避坑指南：✅ 正确做法 / ❌ 错误做法
-- 即时练习：场景模拟演练"""
+            "compliance": "合规要点：法规背景、规则讲解、案例分析、避坑指南",
+            "sales_skill": "销售要点：技能方法、话术示范、案例对比、场景演练",
+            "product": "产品要点：功能介绍、客户价值、使用场景、案例佐证",
+            "business_etiquette": "礼仪要点：基本原则、行为规范、案例分析、场景演练"
         }
-        return templates.get(training_type, templates.get("product", templates["product"]))
+        return templates.get(training_type, templates["product"])
 
     def _generate_script(self, parsed: ParsedPrompt, integrated: IntegratedContent, knowledge_context: str) -> str:
         """生成数字人口播脚本"""

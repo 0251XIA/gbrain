@@ -8,6 +8,9 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 import json
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from gbrain.plugins.training.service import get_training_service
 from gbrain.plugins.training.learning_agent import LearningAgent
@@ -349,6 +352,11 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             training_type = data.get('training_type', 'product')
             output_format = data.get('output_format', 'lecture')
 
+            # 验证 training_type
+            valid_training_types = {'product', 'compliance', 'sales_skill', 'business_etiquette'}
+            if training_type not in valid_training_types:
+                training_type = 'product'
+
             # 兼容简单格式：自动构建 Markdown prompt
             if not user_prompt:
                 topic = data.get('topic', '')
@@ -362,20 +370,33 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 # 如果有选择知识库文件，获取内容
                 if content_source and not file_contents:
                     db = Database()
+                    found_count = 0
                     for page_id in content_source:
                         page = db.get_page(page_id)
                         if page:
                             file_contents.append(page.get('content', ''))
+                            found_count += 1
+                        else:
+                            logger.warning(f"KB page not found: {page_id}")
+                    logger.info(f"Loaded {found_count}/{len(content_source)} KB pages")
 
                 # 构建 Markdown 格式 prompt（包含完整描述）
-                # 尝试从描述中提取章节名称（支持 ### 第X章 或 第X章 格式）
+                # 尝试从描述中提取章节名称（支持多种格式）
                 import re
-                # 匹配 Markdown 标题中的章节：### 第1章 职业形象、## 第2章 商务礼仪 等
+
+                # 匹配格式1：### 第1章 职业形象、## 第2章 商务礼仪
                 chapter_matches = re.findall(r'(?:^#{1,3}\s*)?第(\d+)章\s+(.+?)(?=\n|$)', description, re.MULTILINE)
-                if chapter_matches:
-                    modules_md = '\n'.join([f'#### 模块{i+1}：{name.strip()}' for i, (_, name) in enumerate(chapter_matches)])
+
+                # 匹配格式2：①商务礼仪的作用 ②电话应对 等
+                if not chapter_matches:
+                    chapter_pattern = r'[①②③④⑤⑥]\s*([^①②③④⑤⑥\n]{2,30})'
+                    chapter_names = [name.strip() for name in re.findall(chapter_pattern, description) if name.strip() and len(name.strip()) > 1]
+                    if chapter_names:
+                        modules_md = '\n'.join([f'#### 模块{i+1}：{name}' for i, name in enumerate(chapter_names)])
+                    else:
+                        modules_md = '\n'.join([f'#### 模块{i+1}' for i in range(num_chapters)])
                 else:
-                    modules_md = '\n'.join([f'#### 模块{i+1}' for i in range(num_chapters)])
+                    modules_md = '\n'.join([f'#### 模块{i+1}：{name.strip()}' for i, (_, name) in enumerate(chapter_matches)])
 
                 user_prompt = f"""## 基本信息
 - 培训主题：{topic}
@@ -385,9 +406,6 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 - 时长：约 {num_chapters * 15} 分钟
 - 风格：专业严谨
 
-## 需求描述
-{description}
-
 ## 大纲结构
 ### 模块拆解层
 {modules_md}
@@ -395,33 +413,29 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 
             builder = LectureGenerationBuilder()
 
-            # 自动检测培训类型
+            # 自动检测培训类型（仅在简单格式时需要）
             training_type_auto = training_type
-            topic_lower = topic.lower()
-            desc_lower = description.lower()
-            combined = topic_lower + ' ' + desc_lower
-            if any(kw in combined for kw in ['礼仪', '礼仪培训', '商务礼仪', '职场礼仪']):
-                training_type_auto = 'business_etiquette'
-            elif any(kw in combined for kw in ['销售', '话术', '客户']):
-                training_type_auto = 'sales_skill'
-            elif any(kw in combined for kw in ['合规', '法规', '制度']):
-                training_type_auto = 'compliance'
+            if not user_prompt:
+                topic_lower = topic.lower()
+                desc_lower = description.lower()
+                combined = topic_lower + ' ' + desc_lower
+
+                if any(kw in combined for kw in ['礼仪', '礼仪培训', '商务礼仪', '职场礼仪']):
+                    training_type_auto = 'business_etiquette'
+                elif any(kw in combined for kw in ['销售', '话术', '客户']):
+                    training_type_auto = 'sales_skill'
+                elif any(kw in combined for kw in ['合规', '法规', '制度']):
+                    training_type_auto = 'compliance'
 
             result = builder.build(user_prompt, file_contents, training_type_auto, output_format)
 
             return JSONResponse({
                 "success": True,
-                "content": result['content'],
-                "user_prompt_params": result['user_prompt_params'],
-                "outline": result['outline'],
-                "validation_report": result['validation_report'],
-                "knowledge_points": result['knowledge_points'],
-                "case_library": result.get('case_library', []),
-                "supplementary_materials": result.get('supplementary_materials', {}),
-                "metadata": result['metadata']
+                "content": result['content']
             })
         except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+            logger.exception("Course generation failed")
+            return JSONResponse({"success": False, "error": "生成失败，请重试"}, status_code=500)
 
     @app.post("/api/training/admin/task")
     async def api_create_task(request: Request):
