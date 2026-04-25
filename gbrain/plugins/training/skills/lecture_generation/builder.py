@@ -30,7 +30,7 @@ class LectureGenerationBuilder:
         content = self.generator.generate(parsed, integrated, training_type, output_format)
 
         # Step 4: 校验
-        validation_report = self.validator.validate(content, parsed)
+        validation_report = self.validator.validate(content, parsed, training_type)
 
         # 构建输出
         return {

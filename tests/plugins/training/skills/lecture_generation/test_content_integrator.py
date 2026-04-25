@@ -117,6 +117,7 @@ def test_distribute_content_multi_module():
 
     result = integrator.integrate(parsed, file_contents)
 
-    # 内容应同时分配给两个模块
-    assert len(result.module_contents["模块1-电话话术"]) >= 1
-    assert len(result.module_contents["模块2-产品知识"]) >= 1
+    # 内容应分配给最相关的模块（不重复复制）
+    # 由于两个模块得分相同，内容只分配给第一个匹配的模块
+    total_assigned = sum(len(items) for items in result.module_contents.values())
+    assert total_assigned == 1, f"内容不应重复分配，应只分配给1个模块，实际分配了{total_assigned}次"

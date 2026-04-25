@@ -3,7 +3,7 @@ from .models import ParsedPrompt, ValidationReport
 
 
 class Validator:
-    def validate(self, lecture_content: str, parsed: ParsedPrompt) -> ValidationReport:
+    def validate(self, lecture_content: str, parsed: ParsedPrompt, training_type: str = "product") -> ValidationReport:
         """校验讲义内容与用户需求的匹配度"""
         issues: list[str] = []
         suggestions: list[str] = []
@@ -20,11 +20,11 @@ class Validator:
         # Practical Score
         practical = self._check_practical(lecture_content, parsed, issues, suggestions)
 
-        # Structure Score
-        structure = self._check_structure(lecture_content, parsed, issues, suggestions)
+        # Structure Score (根据training_type使用不同章节)
+        structure = self._check_structure(lecture_content, parsed, training_type, issues, suggestions)
 
-        # Calculate overall
-        overall = int((prompt_match + coverage + compliance + practical + structure) / 5)
+        # Calculate overall（加权平均）
+        overall = int(prompt_match * 0.25 + coverage * 0.25 + compliance * 0.2 + practical * 0.15 + structure * 0.15)
 
         return ValidationReport(
             prompt_match_score=prompt_match,
@@ -94,9 +94,23 @@ class Validator:
             suggestions.append("添加即时练习题以巩固学习效果")
         return min(score, 100)
 
-    def _check_structure(self, content: str, parsed: ParsedPrompt, issues: list[str], suggestions: list[str]) -> int:
+    def _check_structure(self, content: str, parsed: ParsedPrompt, training_type: str = "product", issues: list[str] = None, suggestions: list[str] = None) -> int:
+        if issues is None:
+            issues = []
+        if suggestions is None:
+            suggestions = []
         score = 80
-        required_sections = ["场景引入", "方法讲解", "案例佐证", "避坑指南", "即时练习"]
+
+        # 根据培训类型使用不同的必要章节
+        if training_type == "compliance":
+            required_sections = ["法规背景", "规则讲解", "案例分析", "避坑指南", "即时练习"]
+        elif training_type == "sales_skill":
+            required_sections = ["场景引入", "技能方法", "话术示范", "案例分析", "避坑指南"]
+        elif training_type == "business_etiquette":
+            required_sections = ["基本原则", "行为规范", "案例分析", "避坑指南", "即时练习"]
+        else:  # product 或默认
+            required_sections = ["场景引入", "方法讲解", "案例佐证", "避坑指南", "即时练习"]
+
         for section in required_sections:
             if section not in content:
                 issues.append(f"讲义缺少必要章节：{section}")

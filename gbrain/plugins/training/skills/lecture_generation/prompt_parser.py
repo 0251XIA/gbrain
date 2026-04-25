@@ -53,8 +53,7 @@ class PromptParser:
             '目标岗位': 'position',
             '所属行业': 'industry',
             '时长': 'duration',
-            '风格': 'style',
-            '需求描述': 'description'
+            '风格': 'style'
         }
         in_basic_info = False
         info = {}
@@ -75,6 +74,13 @@ class PromptParser:
     def _extract_objectives(self, lines: list[str]) -> list[str]:
         in_objectives = False
         objectives = []
+        # 支持多种编号格式：1.  1、  一、  （一）
+        patterns = [
+            r'^\d+\.\s+(.+)',      # 1. xxx
+            r'^\d+、\s*(.+)',      # 1、xxx
+            r'^[一二三四五六七八九十]+、\s*(.+)',  # 一、xxx
+            r'^[（\(][一二三四五六七八九十]+[）\)]\s*(.+)',  # （一）xxx
+        ]
         for line in lines:
             if '## 学习目标' in line:
                 in_objectives = True
@@ -82,9 +88,11 @@ class PromptParser:
             if in_objectives:
                 if line.startswith('## '):
                     break
-                match = re.match(r'\d+\.\s*(.+)', line)
-                if match:
-                    objectives.append(match.group(1).strip())
+                for pattern in patterns:
+                    match = re.match(pattern, line.strip())
+                    if match:
+                        objectives.append(match.group(1).strip())
+                        break
         return objectives
 
     def _extract_description(self, lines: list[str]) -> str:
@@ -149,7 +157,17 @@ class PromptParser:
         return outline
 
     def _count_modules(self, lines: list[str]) -> int:
-        return sum(1 for line in lines if re.match(r'#### 模块', line))
+        # 支持多种模块标记格式：#### 模块、#### 第X章、#### X. xxx
+        count = 0
+        for line in lines:
+            # 匹配 #### 模块、#### 第X章、#### X. xxx 等
+            if re.match(r'^####\s+', line):
+                # 去除"#### "后检查是否包含模块相关词汇
+                content = re.sub(r'^####\s+', '', line).strip()
+                # 检查是否包含模块/章/节等关键词，或者是数字开头的标题
+                if any(kw in content for kw in ['模块', '章', '节']) or re.match(r'^[0-9一二三四五六七八九十]+', content):
+                    count += 1
+        return count
 
     def _parse_style(self, style: str) -> StyleType:
         style_map = {
@@ -157,4 +175,9 @@ class PromptParser:
             '专业严谨': '专业严谨',
             '口语化': '口语化'
         }
-        return style_map.get(style, '专业严谨')
+        result = style_map.get(style, None)
+        if result is None:
+            import warnings
+            warnings.warn(f"未知风格值 '{style}'，已默认设置为'专业严谨'")
+            result = '专业严谨'
+        return result

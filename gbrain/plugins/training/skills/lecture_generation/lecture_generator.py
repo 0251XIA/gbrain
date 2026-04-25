@@ -2,9 +2,10 @@ from .models import ParsedPrompt, IntegratedContent
 import re
 
 
-def call_llm(prompt: str, system_prompt: str = "") -> str:
-    """调用 MiniMax API 生成内容"""
+def call_llm(prompt: str, system_prompt: str = "", max_retries: int = 3) -> str:
+    """调用 MiniMax API 生成内容（带重试机制）"""
     import requests
+    import time
     from gbrain.config import MINIMAX_API_KEY, MINIMAX_BASE_URL, MODEL_NAME
 
     api_key = MINIMAX_API_KEY
@@ -21,19 +22,32 @@ def call_llm(prompt: str, system_prompt: str = "") -> str:
         "temperature": 0.7
     }
 
-    try:
-        response = requests.post(
-            f"{MINIMAX_BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=payload,
-            timeout=180
-        )
-        if response.status_code != 200:
-            raise Exception(f"API 错误: {response.status_code}")
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
-    except Exception as e:
-        raise Exception(f"LLM 调用失败: {str(e)}")
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{MINIMAX_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=180
+            )
+            if response.status_code == 429:
+                # Rate limit - wait and retry
+                wait_time = (attempt + 1) * 5  # 5, 10, 15 seconds
+                time.sleep(wait_time)
+                continue
+            if response.status_code != 200:
+                raise Exception(f"API 错误: {response.status_code}")
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 3  # 3, 6, 9 seconds
+                time.sleep(wait_time)
+                continue
+
+    raise Exception(f"LLM 调用失败（已重试{max_retries}次）: {str(last_error)}")
 
 
 class LectureGenerator:
@@ -76,9 +90,9 @@ class LectureGenerator:
             if res:
                 parts.append("\n## 配套资源\n" + "\n".join(f"- {r}" for r in res[:5]))
 
-        # 如果模块内容太少（总字数 < 500），使用原始文件内容补充
+        # 如果模块内容太少（总字数 < 1500），使用原始文件内容补充
         total_module_chars = sum(len(c) for contents in integrated.module_contents.values() for c in contents)
-        if total_module_chars < 500 and integrated.raw_file_contents:
+        if total_module_chars < 1500 and integrated.raw_file_contents:
             raw_content = "\n\n".join(integrated.raw_file_contents)
             if raw_content not in "\n\n".join(parts):
                 parts.insert(0, f"## 知识库原始内容（用于补充讲义）\n{raw_content}")

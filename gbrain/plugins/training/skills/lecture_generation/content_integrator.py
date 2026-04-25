@@ -51,20 +51,36 @@ class ContentIntegrator:
                 modules.extend(items)
         return modules
 
+    def _extract_keywords(self, text: str) -> list[str]:
+        """提取关键词，中文使用2-gram滑动窗口，英文/数字使用单词"""
+        keywords = []
+        # 英文/数字词
+        english_words = re.findall(r'[a-zA-Z0-9]+', text)
+        keywords.extend([w for w in english_words if len(w) > 1])
+
+        # 中文2-gram滑动窗口
+        chinese_text = re.sub(r'[a-zA-Z0-9\s]', '', text)
+        for i in range(len(chinese_text) - 1):
+            kw = chinese_text[i:i+2]
+            if kw not in keywords:
+                keywords.append(kw)
+
+        return [k for k in keywords if len(k) > 1]
+
     def _process_fallback_pool(self, fallback_pool: list[str], module_contents: dict[str, list[str]], modules: list[str], objectives: list[str]):
         """将未分配内容按学习目标关键词重新分配"""
-        # 提取学习目标关键词
+        # 提取学习目标关键词（使用改进的中文切分）
         objective_keywords: list[str] = []
         for obj in objectives:
-            keywords = re.findall(r'[\w]+', obj)
-            objective_keywords.extend([k for k in keywords if len(k) > 1])
+            keywords = self._extract_keywords(obj)
+            objective_keywords.extend(keywords)
 
         # 尝试用学习目标关键词匹配
         for content in fallback_pool:
             best_module = None
             best_score = 0
             for module in modules:
-                score = sum(1 for kw in objective_keywords if re.search(rf'\b{re.escape(kw)}\b', content))
+                score = sum(1 for kw in objective_keywords if kw in content)
                 if score > best_score:
                     best_score = score
                     best_module = module
@@ -134,20 +150,24 @@ class ContentIntegrator:
                     score += 1
             module_scores[module] = score
 
-        # 多模块分配：分配给所有得分 > 0 的模块（避免重复分配到所有模块）
+        # 多模块分配：仅分配给得分最高的模块（避免内容重复）
         # 如果最高分为0（没有匹配），不分配
         max_score = max(module_scores.values()) if module_scores else 0
         if max_score == 0:
             return False
 
-        distributed = False
+        # 找到得分最高的第一个模块
+        best_module = None
         for module, score in module_scores.items():
             if score == max_score:
-                module_contents[module].append(content)
-                distributed = True
-                # 不 break，继续分配给其他同最高分模块
+                best_module = module
+                break
 
-        return distributed
+        if best_module:
+            module_contents[best_module].append(content)
+            return True
+
+        return False
 
     def _extract_cases(self, file_contents: list[str]) -> list[dict]:
         """从文件内容中提取案例，使用多种模式匹配"""
