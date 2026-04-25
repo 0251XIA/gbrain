@@ -97,54 +97,55 @@ async function loadTask() {
             const summary = extractSummary(content);
             const description = data.task.description || '';
 
+            // 从任务描述中提取受众
+            let audience = '';
+            const audienceMatch = description.match(/培训受众[：:]\s*(.+?)(?:\n|$)/i);
+            if (audienceMatch) audience = audienceMatch[1].trim();
+
+            // 从任务描述中提取学习时长
+            let duration = '';
+            const durationMatch = description.match(/(?:学习)?时长[：:]\s*(.+?)(?:\n|$)/i);
+            if (durationMatch) duration = durationMatch[1].trim();
+
             // 从任务描述中提取学习目标
             let objectives = [];
-            if (description.includes('学习目标') || description.includes('目标')) {
-                const objMatch = description.match(/(?:学习目标|目标)[：:]\s*([\s\S]*?)(?:\n\n|$)/i);
-                if (objMatch) {
-                    objectives = objMatch[1].split(/[、，；]/).filter(o => o.trim()).map(o => o.trim());
-                }
+            const objMatch = description.match(/(?:学习)?目标[：:]\s*([\s\S]*?)(?=\n\n|$)/i);
+            if (objMatch) {
+                objectives = objMatch[1].split(/[、，；]/).filter(o => o.trim()).map(o => o.trim());
             }
-            // 如果没有提取到，使用默认目标
             if (objectives.length === 0) {
-                objectives = [
-                    '掌握本课程的核心知识点',
-                    '能够理解和应用相关技能',
-                    '完成课程后通过测验考核'
-                ];
+                objectives = ['掌握本课程的核心知识点', '能够理解和应用相关技能', '完成课程后通过测验考核'];
             }
 
-            let summaryHtml = '';
-            if (summary.length > 0) {
-                summaryHtml = summary.map((s, i) => `
-                    <div style="display: flex; align-items: flex-start; margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 8px;">
-                        <span style="background: #4361ee; color: white; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; margin-right: 0.75rem; flex-shrink: 0;">${i + 1}</span>
-                        <div>
-                            <div style="font-weight: bold; color: #333; margin-bottom: 0.25rem;">${s.section}</div>
-                            <div style="color: #666; font-size: 0.875rem;">${s.desc}</div>
-                        </div>
+            let summaryHtml = summary.length > 0 ? summary.map((s, i) => `
+                <div style="display: flex; align-items: flex-start; margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 8px;">
+                    <span style="background: #4361ee; color: white; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; margin-right: 0.75rem; flex-shrink: 0;">${i + 1}</span>
+                    <div>
+                        <div style="font-weight: bold; color: #333; margin-bottom: 0.25rem;">${s.section}</div>
+                        <div style="color: #666; font-size: 0.875rem;">${s.desc}</div>
                     </div>
-                `).join('');
-            } else {
-                summaryHtml = '<p style="color: #999;">暂无课程大纲</p>';
-            }
+                </div>
+            `).join('') : '<p style="color: #999;">暂无课程大纲</p>';
 
-            let objectivesHtml = objectives.map(obj => `<li>${obj}</li>`).join('');
+            const typeLabel = data.task.task_type === 'onboarding' ? '入职培训' : '技能提升';
+            const deadlineText = data.task.deadline ? `截止日期：${data.task.deadline}` : '未设置截止日期';
 
             container.innerHTML = `
                 <div style="max-width: 800px; margin: 0 auto;">
                     <div class="card" style="margin-bottom: 1rem;">
                         <h1 style="font-size: 1.5rem; margin-bottom: 0.75rem;">${data.task.title}</h1>
-                        <div style="margin-bottom: 0.75rem;">
-                            <span class="tag">${data.task.task_type === 'onboarding' ? '入职培训' : '技能提升'}</span>
-                            <span style="margin-left: 1rem; color: #999; font-size: 0.875rem;">截止日期：${data.task.deadline || '未设置'}</span>
+                        <div style="margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                            <span class="tag">${typeLabel}</span>
+                            ${audience ? `<span style="color: #666; font-size: 0.875rem;">👥 ${audience}</span>` : ''}
+                            ${duration ? `<span style="color: #666; font-size: 0.875rem;">⏱️ ${duration}</span>` : ''}
+                            <span style="color: #999; font-size: 0.875rem;">${deadlineText}</span>
                         </div>
                     </div>
 
                     <div class="learn-objectives">
                         <h3>🎯 学习目标</h3>
                         <ul>
-                            ${objectivesHtml}
+                            ${objectives.map(obj => `<li>${obj}</li>`).join('')}
                         </ul>
                     </div>
 
