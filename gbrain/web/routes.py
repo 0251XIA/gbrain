@@ -23,6 +23,101 @@ learning_sessions: dict[str, LearningAgent] = {}
 STATUS_TEXT_MAP = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 
 
+def _clean_lecture_content(content: str) -> str:
+    """过滤讲义内容，移除生成元数据"""
+    if not content:
+        return content
+    import re
+
+    # 先移除所有 think 标记块 (<think>...</think>)
+    # 分步移除，避免字符串解析问题
+    start_marker = '<think>'
+    end_marker = '</think>'
+    while start_marker in content:
+        start_idx = content.find(start_marker)
+        end_idx = content.find(end_marker, start_idx)
+        if end_idx != -1:
+            content = content[:start_idx] + content[end_idx + len(end_marker):]
+        else:
+            break
+
+    lines = content.split('\n')
+    result = []
+
+    # 跳过整个章节的模式（包括其下属内容）
+    skip_section_patterns = [
+        r'^## 基本信息',
+        r'^## 开篇',
+        r'^## 学习目标',
+        r'^## 准备工作',
+        r'^## 培训目标',
+        r'^## 培训场景',
+        r'^## 培训目的',
+        r'^## 模块总结',
+        r'^## 本章小结',
+        r'^## 行动计划',
+    ]
+
+    # 跳过单个子章节（### 开头）的模式
+    skip_subsection_patterns = [
+        r'^### 培训场景',
+        r'^### 培训目标',
+        r'^### 培训目的',
+        r'^### 需求',
+        r'^### 思考',
+        r'^### 分析',
+        r'^### 案例分析',
+        r'^### 学习目标',
+        r'^### 准备工作',
+    ]
+
+    # 跳过多行内容的关键词（正则表达式匹配）
+    skip_line_patterns = [
+        r'^通过本培训，您将掌握',
+        r'^本章将介绍.*相关知识和技能',
+        r'^这就是商务礼仪的力量',
+        r'^它不是刻板的条条框框',
+        r'^而是在每一个细节中传递价值',
+        r'^本次培训时长约',
+        r'^将帮助大家',
+        r'^- \*\*理解\*\*',  # 匹配列表项 "- **理解**..."
+        r'^- \*\*掌握\*\*',
+        r'^- \*\*学会\*\*',
+        r'^- \*\*运用\*\*',
+        r'^- \*\*提升\*\*',
+    ]
+
+    skip_until_h2 = False
+
+    for line in lines:
+        trimmed = line.strip()
+
+        # 遇到 ## 或 ### 标题，重置跳过状态
+        if re.match(r'^#{1,3}\s', trimmed):
+            skip_until_h2 = False
+
+        # 检查是否需要跳过整个 ## 章节
+        if any(re.match(p, trimmed) for p in skip_section_patterns):
+            skip_until_h2 = True
+            continue
+
+        if skip_until_h2:
+            continue
+
+        # 检查是否需要跳过 ### 子章节
+        if any(re.match(p, trimmed) for p in skip_subsection_patterns):
+            skip_until_h2 = True
+            continue
+
+        # 检查是否匹配整行关键词（任意位置）
+        if any(re.search(p, trimmed) for p in skip_line_patterns):
+            continue
+
+        result.append(line)
+
+    return '\n'.join(result)
+
+
 def register_routes(app: FastAPI, templates: Jinja2Templates):
     """注册所有路由"""
 
@@ -157,7 +252,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 "title": task.title,
                 "description": task.description,
                 "task_type": task.task_type.value,
-                "content": task.content,
+                "content": _clean_lecture_content(task.content),
                 "deadline": task.deadline.isoformat() if task.deadline else None,
                 "status": task.status.value,
                 "quiz_items": [
@@ -190,7 +285,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         return JSONResponse({
             "progress_id": progress_id,
             "task_title": task.title,
-            "content": task.content,
+            "content": _clean_lecture_content(task.content),
             "quiz_items": [
                 {
                     "id": q.id,
@@ -209,10 +304,13 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         if not task:
             return JSONResponse({"error": "Task not found"}, status_code=404)
 
+        # 过滤讲义内容，移除生成元数据
+        clean_content = _clean_lecture_content(task.content)
+
         return JSONResponse({
             "progress_id": task_id,  # 用task_id作为progress_id演示
             "task_title": task.title,
-            "content": task.content,
+            "content": clean_content,
             "quiz_items": [
                 {
                     "id": q.id,
@@ -342,6 +440,9 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         try:
             body = await request.body()
             data = json.loads(body)
+            import sys
+            sys.stderr.write(f"[API] topic={data.get('topic', '')}, desc={str(data.get('description', ''))[:50]}, content_source={data.get('content_source', [])}\n")
+            sys.stderr.flush()
 
             user_prompt = data.get('user_prompt', '')
             file_contents = data.get('file_contents', [])
@@ -364,35 +465,145 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     return JSONResponse({"success": False, "error": "培训主题不能为空"}, status_code=400)
 
                 # 如果有选择知识库文件，获取内容
+                kb_raw_contents = []
+                kb_load_warnings = []
+                invalid_file_ids = []
                 if content_source and not file_contents:
                     db = Database()
                     found_count = 0
                     for page_id in content_source:
                         page = db.get_page(page_id)
                         if page:
-                            file_contents.append(page.get('content', ''))
+                            kb_content = page.get('content', '')
+                            kb_raw_contents.append(kb_content)
+                            file_contents.append(kb_content)
                             found_count += 1
+                            logger.info(f"成功读取 KB page: {page_id}, title={page.get('title','')}, content_len={len(kb_content)}")
                         else:
-                            logger.warning(f"KB page not found: {page_id}")
-                    logger.info(f"Loaded {found_count}/{len(content_source)} KB pages")
+                            invalid_file_ids.append(page_id)
+                            kb_load_warnings.append(f"知识库文件 {page_id} 未找到")
+                            logger.warning(f"KB page 未找到: {page_id}")
+                    if invalid_file_ids:
+                        logger.warning(f"无效的知识库文件 IDs: {invalid_file_ids}")
+                    logger.info(f"Loaded {found_count}/{len(content_source)} KB pages, content_source={content_source}")
+                    if found_count == 0 and content_source:
+                        return JSONResponse({
+                            "success": False,
+                            "error": f"选定的知识库文件均未找到，请重新选择有效的文件。无效的文件ID: {invalid_file_ids}"
+                        }, status_code=400)
 
-                # 构建 Markdown 格式 prompt（包含完整描述）
-                # 尝试从描述中提取章节名称（支持多种格式）
+                # 构建章节结构：根据用户描述生成，优先使用描述中的关键词
                 import re
 
-                # 匹配格式1：### 第1章 职业形象、## 第2章 商务礼仪
-                chapter_matches = re.findall(r'(?:^#{1,3}\s*)?第(\d+)章\s+(.+?)(?=\n|$)', description, re.MULTILINE)
+                # 从描述中提取关键词/功能点作为章节
+                def extract_keywords_from_description(desc: str) -> list[str]:
+                    """从描述中智能提取关键词作为章节，兼容所有常见格式"""
+                    if not desc:
+                        return []
 
-                # 匹配格式2：①商务礼仪的作用 ②电话应对 等
-                if not chapter_matches:
-                    chapter_pattern = r'[①②③④⑤⑥]\s*([^①②③④⑤⑥\n]{2,30})'
-                    chapter_names = [name.strip() for name in re.findall(chapter_pattern, description) if name.strip() and len(name.strip()) > 1]
-                    if chapter_names:
-                        modules_md = '\n'.join([f'#### 模块{i+1}：{name}' for i, name in enumerate(chapter_names)])
-                    else:
-                        modules_md = '\n'.join([f'#### 模块{i+1}' for i in range(num_chapters)])
+                    all_keywords = []
+                    seen = set()
+
+                    def add_keyword(kw):
+                        kw = kw.strip()
+                        kw = re.sub(r'^(熟悉|掌握|了解|学习|学会|包含|包括)\s*', '', kw)
+                        if kw and len(kw) >= 2 and kw not in seen:
+                            seen.add(kw)
+                            all_keywords.append(kw)
+
+                    # 按行处理，匹配各种编号前缀
+                    prefix_patterns = [
+                        r'^[\u2460-\u2473]\s*',           # 圆圈编号
+                        r'^\d+[、.]\s*',                  # 数字+顿号/点
+                        r'^[一二三四五六七八九十]+[、.]\s*', # 中文数字+顿号/点
+                        r'^[\uff08(][一二三四五六七八九十]+[\uff09)]\s*', # 括号中文数字
+                    ]
+
+                    for line in desc.split('\n'):
+                        line_stripped = line.strip()
+                        if not line_stripped:
+                            continue
+                        matched = False
+                        for pattern in prefix_patterns:
+                            match_obj = re.match(pattern, line_stripped)
+                            if match_obj:
+                                content_after = line_stripped[match_obj.end():].strip()
+                                if content_after:
+                                    add_keyword(content_after)
+                                    matched = True
+                                break
+                        # 如果没匹配到编号，尝试顿号分隔
+                        if not matched and '、' in line_stripped and 5 <= len(line_stripped) <= 80:
+                            parts = line_stripped.split('、')
+                            if 2 <= len(parts) <= 10:
+                                for part in parts:
+                                    add_keyword(part.strip())
+
+                    # 如果没有提取到，尝试整段顿号分隔
+                    if not all_keywords and '、' in desc:
+                        parts = desc.split('、')
+                        if 3 <= len(parts) <= 15:
+                            for part in parts:
+                                add_keyword(part)
+
+                    # 如果还是没有，尝试逗号分隔
+                    if not all_keywords and ('，' in desc or ',' in desc):
+                        parts = re.split(r'[，,]', desc)
+                        if 3 <= len(parts) <= 20:
+                            for part in parts:
+                                add_keyword(part)
+
+                    return all_keywords
+
+
+                # 从知识库内容中提取章节标题（作为备选）
+                def extract_chapters_from_kb(kb_contents):
+                    """从知识库内容中智能提取章节"""
+                    all_lines = []
+                    for kb_content in kb_contents:
+                        all_lines.extend(kb_content.split('\n'))
+
+                    chapters = []
+                    for line in all_lines:
+                        stripped = line.strip()
+                        # 识别章节标题特征
+                        if re.match(r'^#{2,3}\s+', stripped):
+                            title = re.sub(r'^#+\s+', '', stripped).strip()
+                            title = re.sub(r'^[\d\.\、．]+[\s\、\.]+', '', title)
+                            title = re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]+[\s\、\.]+', '', title)
+                            if len(title) >= 2 and len(title) <= 40:
+                                chapters.append(title)
+                        elif re.match(r'^第[一二三四五六七八九十百零\d]+[章节部]', stripped):
+                            chapters.append(stripped)
+
+                    seen = set()
+                    unique_chapters = []
+                    for c in chapters:
+                        if c not in seen:
+                            seen.add(c)
+                            unique_chapters.append(c)
+                    return unique_chapters
+
+                # 提取描述中的关键词作为章节
+                desc_keywords = extract_keywords_from_description(description)
+                logger.info(f"从描述提取的关键词: {desc_keywords}")
+
+                # 提取知识库中的章节
+                kb_chapters = extract_chapters_from_kb(kb_raw_contents) if kb_raw_contents else []
+
+                # 决定章节结构：描述关键词 > 知识库章节 > 默认生成
+                if desc_keywords:
+                    # 优先使用描述中的关键词
+                    modules_md = '\n'.join([f'#### 模块{i+1}：{name}' for i, name in enumerate(desc_keywords[:num_chapters])])
+                    logger.info(f"使用描述关键词生成 {len(desc_keywords[:num_chapters])} 个模块")
+                elif kb_chapters:
+                    # 其次使用知识库的章节
+                    modules_md = '\n'.join([f'#### 模块{i+1}：{name}' for i, name in enumerate(kb_chapters[:num_chapters])])
+                    logger.info(f"使用知识库章节生成 {len(kb_chapters[:num_chapters])} 个模块")
                 else:
-                    modules_md = '\n'.join([f'#### 模块{i+1}：{name.strip()}' for i, (_, name) in enumerate(chapter_matches)])
+                    # 最后按数量生成空模块
+                    modules_md = '\n'.join([f'#### 模块{i+1}' for i in range(num_chapters)])
+                    logger.info("使用默认空模块")
 
                 user_prompt = f"""## 基本信息
 - 培训主题：{topic}
@@ -423,7 +634,17 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 elif any(kw in combined for kw in ['合规', '法规', '制度']):
                     training_type_auto = 'compliance'
 
+            with open('/tmp/api_debug2.txt', 'a') as f:
+                f.write(f"[API] file_contents={len(file_contents)} items\n")
+                if file_contents:
+                    f.write(f"[API] file_contents[0][:200]={file_contents[0][:200]}\n")
+                else:
+                    f.write("[API] file_contents is EMPTY\n")
+
             result = builder.build(user_prompt, file_contents, training_type_auto, output_format)
+
+            with open('/tmp/api_debug2.txt', 'a') as f:
+                f.write(f"[API] result[:200]={result['content'][:200]}\n")
 
             return JSONResponse({
                 "success": True,
@@ -524,7 +745,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
 
                 # 存入知识库
                 page_id = str(uuid.uuid4())
-                db.insert_page(
+                logger.info(f"上传文件: {file.filename}, page_id={page_id}, content长度={len(markdown_content)}")
+                insert_result = db.insert_page(
                     page_id=page_id,
                     title=title,
                     content=markdown_content,
@@ -532,6 +754,10 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     tags=["上传文档", ext.replace('.', '')],
                     links=[]
                 )
+                logger.info(f"insert_page 结果: {insert_result}, title={title}")
+
+                if not insert_result:
+                    raise Exception(f"数据库保存失败: page_id={page_id}, title={title}")
 
                 results.append({
                     "filename": file.filename,
@@ -540,8 +766,10 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     "title": title,
                     "preview": markdown_content[:200] + "..." if len(markdown_content) > 200 else markdown_content
                 })
+                logger.info(f"上传成功: {file.filename} -> page_id={page_id}")
 
             except Exception as e:
+                logger.error(f"上传失败: {file.filename}, error={str(e)}")
                 results.append({
                     "filename": file.filename,
                     "success": False,
@@ -573,6 +801,25 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         service = get_training_service()
         success = service.delete_task(task_id)
         return JSONResponse({"success": success})
+
+    @app.post("/api/training/admin/task/{task_id}/regenerate")
+    async def api_regenerate_task(task_id: str, request: Request):
+        """重新生成任务内容"""
+        service = get_training_service()
+        task = service.get_task(task_id)
+        if not task:
+            return JSONResponse({"error": "Task not found"}, status_code=404)
+
+        try:
+            body = await request.body()
+            data = json.loads(body)
+            new_content = data.get('content', '')
+            if new_content:
+                success = service.update_task(task_id, content=new_content)
+                return JSONResponse({"success": success})
+            return JSONResponse({"error": "Content is required"}, status_code=400)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     @app.get("/api/training/knowledge/pages")
     async def api_knowledge_pages():
@@ -639,7 +886,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 learning_sessions[task_id] = LearningAgent(
                     task_id=task_id,
                     content=task.content or "",
-                    task_title=task.title
+                    task_title=task.title,
+                    progress_id=task_id
                 )
 
             agent = learning_sessions[task_id]

@@ -1,7 +1,7 @@
 """
 LearningAgent - 引导式学习智能体
 
-状态机：tour -> q_and_a -> quiz -> summary -> completed
+状态机：tour -> quiz -> completed
 """
 
 from typing import Optional
@@ -11,40 +11,33 @@ from .chat_engine import TourEngine, QAEngine, QuizEngine
 
 # ========== 状态定义 ==========
 
-VALID_STAGES = ["tour", "q_and_a", "quiz", "summary", "completed"]
+VALID_STAGES = ["tour", "quiz", "completed"]
 
 STAGE_DESCRIPTIONS = {
-    "tour": "课程导览",
-    "q_and_a": "问答环节",
-    "quiz": "测验考核",
-    "summary": "学习总结",
+    "tour": "课程学习",
+    "quiz": "考核阶段",
     "completed": "已完成",
 }
 
 WELCOME_MESSAGES = {
-    "tour": """欢迎开始学习之旅！
+    "tour": """欢迎开始学习！
 
-我将带你逐步学习这份课件。每个知识点按"是什么→为什么→怎么样"的顺序引导你理解。
+我将带你学习这份课件。输入任意内容推进到下一个知识点。
 
 📖 输入"开始"启动学习！""",
 
-    "q_and_a": """现在进入问答环节！
+    "quiz": """考核环节开始！
 
-你可以随时提问关于课程内容的问题，我会结合课件内容为你解答。
+准备好接受考核了吗？
+- 选择题请输入 A/B/C/D
+- 判断题请输入 对/错
+- 简答题请直接输入你的答案
 
-输入"开始测验"可以提前进入测验环节。""",
+输入"开始考核"或任意内容开始第一题。""",
 
-    "quiz": """测验环节开始！
+    "completed": """恭喜完成学习和考核！
 
-准备好了吗？让我们通过几个问题检验你的学习成果。
-
-注意：请使用 A/B/C/D 或 0/1/2/3 格式回答。""",
-
-    "summary": """恭喜完成学习！
-
-让我们回顾一下今天的学习内容...（此处由 AI 自动生成总结）""",
-
-    "completed": """学习已完成，感谢你的参与！
+学习已完成，感谢你的参与！
 
 如果需要重新学习，请输入"重新开始"。""",
 }
@@ -52,7 +45,7 @@ WELCOME_MESSAGES = {
 
 # ========== 特殊指令 ==========
 
-QUIZ_TRIGGER_KEYWORDS = ["开始测验", "我想测验", "测验"]
+QUIZ_TRIGGER_KEYWORDS = ["开始考核", "考核", "考试"]
 
 
 # ========== LearningAgent 类 ==========
@@ -61,11 +54,10 @@ class LearningAgent:
     """
     引导式学习智能体
 
-    负责协调三个对话引擎（导览、问答、测验），
-    管理学习状态流转，处理员工对话。
+    负责协调学习引擎和考核引擎，管理学习状态流转。
     """
 
-    def __init__(self, task_id: str, content: str, task_title: str) -> None:
+    def __init__(self, task_id: str, content: str, task_title: str, progress_id: str = None) -> None:
         """
         初始化 LearningAgent
 
@@ -73,18 +65,23 @@ class LearningAgent:
             task_id: 培训任务 ID
             content: 课件内容
             task_title: 培训任务标题
+            progress_id: 学习进度 ID（用于保存考核记录）
         """
         self.task_id = task_id
         self.content = content
         self.task_title = task_title
+        self.progress_id = progress_id
 
         # 状态机
         self._stage: str = "tour"
 
-        # 初始化三个引擎
+        # 初始化引擎
         self.tour_engine = TourEngine(content)
-        self.qa_engine = QAEngine(content)
         self.quiz_engine = QuizEngine(content)
+
+        # 考核相关状态
+        self._quiz_attempts: int = 0  # 考核次数
+        self._needs_relearn: bool = False  # 是否需要重新学习
 
         # 当前活跃引擎
         self._current_engine = self.tour_engine
@@ -99,7 +96,7 @@ class LearningAgent:
         切换学习阶段
 
         Args:
-            stage: 目标阶段 (tour | q_and_a | quiz | summary | completed)
+            stage: 目标阶段 (tour | quiz | completed)
 
         Raises:
             ValueError: 无效的阶段名称
@@ -112,12 +109,10 @@ class LearningAgent:
         # 更新当前引擎
         if stage == "tour":
             self._current_engine = self.tour_engine
-        elif stage == "q_and_a":
-            self._current_engine = self.qa_engine
         elif stage == "quiz":
             self._current_engine = self.quiz_engine
         else:
-            # summary / completed 阶段不涉及引擎对话
+            # completed 阶段不涉及引擎对话
             self._current_engine = None
 
     def get_welcome_message(self) -> dict:
@@ -149,25 +144,36 @@ class LearningAgent:
         Returns:
             响应格式的 dict
         """
-        # 检查特殊指令
-        if self._is_quiz_trigger(message):
-            if self._stage != "quiz":
-                self.set_stage("quiz")
-                return self._build_response(
-                    message_type="message",
-                    content="好的，现在开始测验环节！",
-                )
+        # 检查是否需要重新学习
+        if self._needs_relearn and message in ["重新学习", "重新开始", "重新开始学习"]:
+            self._needs_relearn = False
+            self._quiz_attempts = 0
+            self.tour_engine.reset()
+            self.set_stage("tour")
+            return self._build_response(
+                message_type="message",
+                content="好的，让我们重新开始学习！\n\n输入任意内容开始学习第一个知识点。"
+            )
+
+        # 检查是否触发考核
+        if self._is_quiz_trigger(message) and self._stage == "tour":
+            return self._start_quiz()
 
         # 根据当前阶段处理对话
         if self._stage == "tour":
             return await self._handle_tour(message)
-        elif self._stage == "q_and_a":
-            return await self._handle_qa(message)
         elif self._stage == "quiz":
             return await self._handle_quiz(message)
-        elif self._stage == "summary":
-            return await self._handle_summary(message)
         elif self._stage == "completed":
+            if message in ["重新学习", "重新开始", "重新开始学习"]:
+                self._needs_relearn = False
+                self._quiz_attempts = 0
+                self.tour_engine.reset()
+                self.set_stage("tour")
+                return self._build_response(
+                    message_type="message",
+                    content="好的，让我们重新开始学习！\n\n输入任意内容开始学习第一个知识点。"
+                )
             return self._build_response(
                 message_type="message",
                 content="学习已完成。如果需要重新学习，请输入\"重新开始\"。",
@@ -177,6 +183,62 @@ class LearningAgent:
                 message_type="message",
                 content="未知阶段，请联系管理员。",
             )
+
+    async def _start_quiz(self) -> dict:
+        """开始考核"""
+        # 基于知识点生成考核题
+        quiz_items = self.tour_engine.generate_quiz_items(
+            num_choice=3, num_judge=2, num_short=2
+        )
+
+        if not quiz_items:
+            return self._build_response(
+                message_type="message",
+                content="抱歉，无法生成考核题，请联系管理员。"
+            )
+
+        # 设置考核题
+        self.quiz_engine.set_quiz_items(quiz_items)
+        self.set_stage("quiz")
+
+        # 获取第一题
+        first_question = self.quiz_engine.get_current_question()
+        if not first_question:
+            return self._build_response(
+                message_type="message",
+                content="抱歉，无法获取考核题。"
+            )
+
+        response = "📋 考核开始！\n\n"
+        response += f"共 {len(quiz_items)} 道题：3道选择题 + 2道判断题 + 2道简答题\n"
+        response += f"满分100分，70分及格。\n\n"
+        response += f"第一题：\n{first_question['question']}\n"
+
+        if first_question['question_type'] == 'choice':
+            for i, opt in enumerate(first_question['options']):
+                response += f"  {'ABCD'[i]}. {opt}\n"
+        elif first_question['question_type'] == 'judge':
+            response += "  A. 对  B. 错\n"
+
+        return self._build_response(
+            message_type="quiz",
+            content=response,
+            metadata={"quiz_started": True, "question_index": 0}
+        )
+
+    async def _handle_tour(self, message: str) -> dict:
+        """处理导览阶段对话"""
+        response = await self.tour_engine.chat(message)
+
+        # 检查是否学习完成
+        if "学习完成" in response:
+            # 自动进入考核
+            return await self._start_quiz()
+
+        return self._build_response(
+            message_type="message",
+            content=response,
+        )
 
     def get_progress(self) -> dict:
         """
@@ -208,9 +270,7 @@ class LearningAgent:
         """获取当前阶段对应的响应类型"""
         type_mapping = {
             "tour": "tour_end",
-            "q_and_a": "q_and_a_end",
             "quiz": "quiz",
-            "summary": "summary",
             "completed": "message",
         }
         return type_mapping.get(self._stage, "message")
@@ -219,7 +279,6 @@ class LearningAgent:
         """获取当前引擎名称"""
         engine_mapping = {
             "tour": "TourEngine",
-            "q_and_a": "QAEngine",
             "quiz": "QuizEngine",
         }
         return engine_mapping.get(self._stage)
@@ -254,37 +313,45 @@ class LearningAgent:
             "metadata": base_metadata,
         }
 
-    async def _handle_tour(self, message: str) -> dict:
-        """处理导览阶段对话"""
-        response = await self.tour_engine.chat(message)
-
-        return self._build_response(
-            message_type="message",
-            content=response,
-        )
-
-    async def _handle_qa(self, message: str) -> dict:
-        """处理问答阶段对话"""
-        response = await self.qa_engine.chat(message)
-
-        return self._build_response(
-            message_type="message",
-            content=response,
-        )
-
     async def _handle_quiz(self, message: str) -> dict:
-        """处理测验阶段对话"""
+        """处理考核阶段对话"""
         response = await self.quiz_engine.chat(message)
 
-        # 检查是否测验结束
+        # 检查是否考核结束
         current_q = self.quiz_engine.get_current_question()
         if current_q is None:
-            self.set_stage("summary")
-            return self._build_response(
-                message_type="quiz",
-                content=response,
-                metadata={"quiz_completed": True}
-            )
+            # 考核结束，处理结果
+            score = self.quiz_engine.get_score()
+            passed = self.quiz_engine.is_passed()
+            self._quiz_attempts += 1
+
+            # 保存考核记录
+            self._save_quiz_record(score, passed)
+
+            if passed:
+                self.set_stage("completed")
+                return self._build_response(
+                    message_type="quiz",
+                    content=response,
+                    metadata={"quiz_completed": True, "passed": True, "score": score}
+                )
+            else:
+                if self._quiz_attempts >= 2:
+                    # 重考2次都不通过，需要重新学习
+                    self._needs_relearn = True
+                    self.set_stage("completed")
+                    return self._build_response(
+                        message_type="quiz",
+                        content=response + "\n\n⚠️ 考核未通过，且已达到最大重考次数（2次）。\n请重新学习后再参加考核。\n\n输入\"重新学习\"开始。",
+                        metadata={"quiz_completed": True, "passed": False, "score": score, "needs_relearn": True}
+                    )
+                else:
+                    # 还有重考机会
+                    return self._build_response(
+                        message_type="quiz",
+                        content=response + f"\n\n📚 还有 {2 - self._quiz_attempts} 次补考机会。\n输入\"重新考核\"或任意内容再次参加考核。",
+                        metadata={"quiz_completed": True, "passed": False, "score": score, "attempts_left": 2 - self._quiz_attempts}
+                    )
 
         return self._build_response(
             message_type="quiz",
@@ -292,25 +359,32 @@ class LearningAgent:
             metadata={"quiz_in_progress": True}
         )
 
-    async def _handle_summary(self, message: str) -> dict:
-        """处理总结阶段对话"""
-        prompt = f"""请为以下培训内容生成学习总结：
+    def _save_quiz_record(self, score: float, passed: bool) -> None:
+        """保存考核记录"""
+        try:
+            from gbrain.database import Database
+            from gbrain.plugins.training.models import QuizRecord
+            import uuid
 
-任务标题：{self.task_title}
+            db = Database()
+            record = QuizRecord(
+                id=str(uuid.uuid4()),
+                progress_id=self.progress_id or "",
+                task_id=self.task_id,
+                total_score=score,
+                passed=passed,
+                attempts=self._quiz_attempts,
+                answers=self.quiz_engine.get_answers()
+            )
 
-课件内容：
-{self.content[:2000]}
-
-请用简洁的语言概括：
-1. 主要学习内容
-2. 关键知识点
-3. 后续建议"""
-        from .course_gen import call_llm
-        response = call_llm(prompt, "")
-
-        self.set_stage("completed")
-
-        return self._build_response(
-            message_type="summary",
-            content=response,
-        )
+            db.insert_quiz_record({
+                'id': record.id,
+                'progress_id': record.progress_id,
+                'task_id': record.task_id,
+                'total_score': record.total_score,
+                'passed': record.passed,
+                'attempts': record.attempts,
+                'answers': record.answers
+            })
+        except Exception as e:
+            print(f"保存考核记录失败: {e}")

@@ -152,21 +152,35 @@ class PromptParser:
                 if line.startswith('### ') and not line.startswith('#### '):
                     current_section = line.replace('### ', '').strip()
                     outline[current_section] = []
-                elif current_section and line.startswith('#### '):
-                    outline[current_section].append(line.replace('#### ', '').strip())
+                elif current_section:
+                    # 支持多种模块格式：
+                    # 1. #### 模块1：xxx（标准格式）
+                    # 2. 模块1：xxx（直接列出）
+                    # 3. 第1章 xxx（章节格式）
+                    module_line = line
+                    if line.startswith('#### '):
+                        module_line = line.replace('#### ', '').strip()
+                    elif line.startswith('模块') or line.startswith('第') or line.startswith('『'):
+                        module_line = line.strip()
+                    else:
+                        continue  # 跳过不认识的格式
+                    # 清理模块名称（去掉前缀如"模块1："）
+                    module_name = re.sub(r'^(模块|第|『)[^：：]*(：|：|』)\s*', '', module_line).strip()
+                    if module_name:
+                        outline[current_section].append(module_name)
         return outline
 
     def _count_modules(self, lines: list[str]) -> int:
-        # 支持多种模块标记格式：#### 模块、#### 第X章、#### X. xxx
+        # 支持多种模块标记格式：#### 模块、#### 第X章、#### X. xxx、模块X：xxx
         count = 0
         for line in lines:
+            content = line.strip()
             # 匹配 #### 模块、#### 第X章、#### X. xxx 等
             if re.match(r'^####\s+', line):
-                # 去除"#### "后检查是否包含模块相关词汇
                 content = re.sub(r'^####\s+', '', line).strip()
-                # 检查是否包含模块/章/节等关键词，或者是数字开头的标题
-                if any(kw in content for kw in ['模块', '章', '节']) or re.match(r'^[0-9一二三四五六七八九十]+', content):
-                    count += 1
+            # 检查是否包含模块/章/节等关键词，或者是模块X：格式
+            if any(kw in content for kw in ['模块', '章', '节']) or re.match(r'^(模块|第)[0-9一二三四五六七八九十]+[：:、]', content):
+                count += 1
         return count
 
     def _parse_style(self, style: str) -> StyleType:

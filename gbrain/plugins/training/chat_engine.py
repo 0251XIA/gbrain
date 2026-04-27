@@ -205,6 +205,13 @@ class TourEngine(ChatEngine):
     async def chat(self, user_input: str) -> str:
         """
         处理对话，根据当前步骤决定输出
+
+        改进的学习流程：
+        1. 展示知识点标题 + 是什么
+        2. 用户输入"继续" → 展示为什么
+        3. 用户输入"继续" → 展示怎么样
+        4. 用户输入"继续" → 提问检验
+        5. 评估回答 → 下一知识点
         """
         # 检查是否是"开始学习"触发词
         is_start_trigger = user_input.strip() in ['开始', '开始学习', 'start', '学习']
@@ -218,17 +225,25 @@ class TourEngine(ChatEngine):
             if not self._knowledge_points:
                 return "抱歉，无法分析课件内容，请联系管理员。"
 
-            # 如果是触发词，初始化状态并返回第一个知识点
-            if is_start_trigger:
-                self._awaiting_answer = True
-                return self._teach_what()
-
-            # 首次调用但不是触发词（不应该走到这里）
+            # 从第一个知识点开始，展示"是什么"
+            self._current_step = "what"
+            self._awaiting_answer = False
             return self._teach_what()
 
-        # 如果在等待用户回答
+        # 用户输入"继续"时推进
+        user_contiune = user_input.strip() in ['继续', 'next', '继续学习']
+        user_start_point = user_input.strip() in ['回答', '答', '我知道了']
+
+        # 如果用户在回答问题
         if self._awaiting_answer:
-            return await self._handle_answer(user_input)
+            if self._current_step == "quiz":
+                return await self._handle_answer(user_input)
+            elif user_contiune:
+                # 用户说"继续"，推进到下一步
+                return self._advance_to_next_step()
+            else:
+                # 其他输入作为回答
+                return await self._handle_answer(user_input)
 
         # 根据当前步骤讲解
         if self._current_step == "what":
@@ -240,7 +255,22 @@ class TourEngine(ChatEngine):
         elif self._current_step == "quiz":
             return self._ask_quiz()
         else:
+            return self._teach_what()
+
+    def _teach_current_point(self) -> str:
+        """一次性输出当前知识点的完整内容（是什么+为什么+怎么样）"""
+        point = self._get_current_point()
+        if not point:
             return self._next_point_or_finish()
+
+        self._awaiting_answer = True
+
+        response = f"📖 【{point['title']}】\n\n"
+        response += f"**是什么：**\n{point.get('what', '')}\n\n"
+        response += f"**为什么：**\n{point.get('why', '')}\n\n"
+        response += f"**怎么样：**\n{point.get('how', '')}"
+
+        return response
 
     def _teach_what(self) -> str:
         """讲解当前知识点的'是什么'"""
@@ -250,11 +280,10 @@ class TourEngine(ChatEngine):
 
         self._current_step = "why"
         self._awaiting_answer = True
-        self._last_question = f"请说说看，这个概念是什么意思？"
 
+        # 直接输出知识点内容，不带引导性问题
         response = f"📖 【{point['title']}】\n\n"
-        response += f"**是什么：**\n{point.get('what', '')}\n\n"
-        response += f"---\n{self._last_question}"
+        response += f"{point.get('what', '')}"
 
         return response
 
@@ -266,10 +295,10 @@ class TourEngine(ChatEngine):
 
         self._current_step = "how"
         self._awaiting_answer = True
-        self._last_question = f"为什么会这样？请谈谈你的理解。"
 
-        response = f"❓ **为什么：**\n{point.get('why', '')}\n\n"
-        response += f"---\n{self._last_question}"
+        # 直接输出知识点内容
+        response = f"❓ 【{point['title']} - 为什么】\n\n"
+        response += f"{point.get('why', '')}"
 
         return response
 
@@ -281,10 +310,10 @@ class TourEngine(ChatEngine):
 
         self._current_step = "quiz"
         self._awaiting_answer = True
-        self._last_question = point.get('quiz', f'学完了"{point["title"]}"，请用自己的话总结一下。')
 
-        response = f"⚡ **怎么样：**\n{point.get('how', '')}\n\n"
-        response += f"---\n{self._last_question}"
+        # 直接输出知识点内容
+        response = f"⚡ 【{point['title']} - 怎么样】\n\n"
+        response += f"{point.get('how', '')}"
 
         return response
 
@@ -298,6 +327,27 @@ class TourEngine(ChatEngine):
         self._last_question = point.get('quiz', f'请回答：{point["title"]}的核心要点是什么？')
 
         return self._last_question
+
+    def _advance_to_next_step(self) -> str:
+        """推进到当前知识点的下一步"""
+        point = self._get_current_point()
+        if not point:
+            return self._next_point_or_finish()
+
+        if self._current_step == "what":
+            self._current_step = "why"
+            self._awaiting_answer = False
+            return self._teach_why()
+        elif self._current_step == "why":
+            self._current_step = "how"
+            self._awaiting_answer = False
+            return self._teach_how()
+        elif self._current_step == "how":
+            self._current_step = "quiz"
+            self._awaiting_answer = False
+            return self._ask_quiz()
+        else:
+            return self._ask_quiz()
 
     async def _handle_answer(self, user_input: str) -> str:
         """处理用户回答"""
@@ -423,12 +473,11 @@ class TourEngine(ChatEngine):
         self._awaiting_answer = False
 
         if self._current_point_index >= len(self._knowledge_points):
-            # 学习完成
-            return self._build_summary()
+            # 学习完成，直接结束
+            return "✅ 学习完成！"
         else:
-            # 下一知识点
-            point = self._get_current_point()
-            return self._start_new_point(point)
+            # 输出下一知识点的完整内容
+            return self._teach_current_point()
 
     def _start_new_point(self, point: dict) -> str:
         """开始新知识点"""
@@ -485,6 +534,98 @@ class TourEngine(ChatEngine):
             'current_point': self._get_current_point()['title'] if self._get_current_point() else ''
         }
 
+    def reset(self) -> None:
+        """重置学习状态，支持重新开始学习"""
+        self._knowledge_points = []
+        self._current_point_index = 0
+        self._current_step = "what"
+        self._is_first_run = True
+        self._scores = []
+        self._awaiting_answer = False
+        self._last_question = ""
+        self.messages = []  # 清空对话历史
+
+    def generate_quiz_items(self, num_choice: int = 3, num_judge: int = 2, num_short: int = 2) -> list[dict]:
+        """
+        基于知识点生成考核题
+
+        Args:
+            num_choice: 选择题数量
+            num_judge: 判断题数量
+            num_short: 简答题数量
+
+        Returns:
+            考核题列表
+        """
+        if not self._knowledge_points:
+            return []
+
+        # 构建知识点摘要用于生成考核题
+        points_summary = "\n".join([
+            f"- {p['title']}: {p.get('what', '')[:100]}"
+            for p in self._knowledge_points
+        ])
+
+        prompt = f"""基于以下知识点，生成考核题目。
+
+知识点：
+{points_summary}
+
+要求：
+1. 选择题 {num_choice} 道：单选题，4个选项，标注正确答案索引
+2. 判断题 {num_judge} 道：判断对错，标注正确答案
+3. 简答题 {num_short} 道：需要简答，提供参考答案和评分关键词
+
+请用以下JSON格式返回：
+{{
+  "quiz_items": [
+    {{
+      "id": "q1",
+      "question": "题目内容",
+      "question_type": "choice",
+      "options": ["选项A", "选项B", "选项C", "选项D"],
+      "correct_index": 0,
+      "explanation": "题解"
+    }},
+    {{
+      "id": "q{num_choice + 1}",
+      "question": "判断题题目",
+      "question_type": "judge",
+      "correct_answer": "true",
+      "explanation": "题解"
+    }},
+    {{
+      "id": "q{num_choice + num_judge + 1}",
+      "question": "简答题题目",
+      "question_type": "short_answer",
+      "correct_answer": "参考答案",
+      "keywords": ["关键词1", "关键词2"],
+      "explanation": "评分标准"
+    }}
+  ]
+}}
+
+注意：
+- 选择题 correct_index: 0=A, 1=B, 2=C, 3=D
+- 判断题 correct_answer: "true" 或 "false"
+- 简答题 keywords 是评分关键词，用户回答包含越多得分越高"""
+
+        try:
+            response = call_llm(prompt, "")
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                items = result.get('quiz_items', [])
+                # 确保有 id
+                for i, item in enumerate(items):
+                    if not item.get('id'):
+                        item['id'] = f"q{i+1}"
+                return items
+        except Exception as e:
+            print(f"生成考核题失败: {e}")
+
+        return []
+
 
 # ========== QAEngine - 问答引擎 ==========
 
@@ -517,67 +658,27 @@ class QAEngine(ChatEngine):
         return response
 
 
-# ========== QuizEngine - 测验引擎 ==========
+# ========== QuizEngine - 考核引擎 ==========
 
 class QuizEngine(ChatEngine):
-    """测验引擎 - 通过问答评估员工学习效果"""
+    """考核引擎 - 支持选择题、判断题、简答题"""
 
-    def __init__(self, content: str, existing_quiz_items: list = None):
+    def __init__(self, content: str, quiz_items: list = None):
         super().__init__(content, stage="quiz")
-        self._quiz_items: list[dict] = existing_quiz_items or []
+        self._quiz_items: list[dict] = quiz_items or []
         self._current_index: int = 0
-        self._answers: list[int] = []
+        self._answers: list[dict] = []  # {"question_id": "", "answer": "", "correct": bool, "score": float}
+        self._total_score: float = 0.0
 
-    def _generate_quiz_items(self, num: int = 5) -> list[dict]:
-        """
-        调用 LLM 生成测验题
-
-        Args:
-            num: 题目数量
-
-        Returns:
-            [{question, options, correct_index, explanation}, ...]
-        """
-        prompt = f"""请根据以下课件内容生成 {num} 道单选题测验题。
-
-课件内容：
-{self.content[:4000]}
-
-要求：
-1. 每道题为单选题
-2. 题目要测试学员对关键知识点的理解
-3. 选项要有区分度，干扰项要合理
-4. 必须明确标注正确答案（correct_index: 0=A, 1=B, 2=C, 3=D）
-5. 输出 JSON 数组格式，不要有其他内容
-
-格式：
-[
-  {{
-    "question": "题目内容",
-    "options": ["选项A", "选项B", "选项C", "选项D"],
-    "correct_index": 0,
-    "explanation": "题解"
-  }}
-]"""
-
-        try:
-            response = call_llm(prompt, "")
-            # 提取 JSON
-            json_match = re.search(r'\[[\s\S]*\]', response)
-            if json_match:
-                items = json.loads(json_match.group(0))
-                return items
-        except Exception:
-            pass
-        return []
+    def set_quiz_items(self, items: list[dict]) -> None:
+        """设置考核题"""
+        self._quiz_items = items or []
+        self._current_index = 0
+        self._answers = []
+        self._total_score = 0.0
 
     def get_current_question(self) -> Optional[dict]:
-        """
-        获取当前题目
-
-        Returns:
-            当前题目 dict 或 None（测验结束）
-        """
+        """获取当前题目"""
         if self._current_index >= len(self._quiz_items):
             return None
 
@@ -587,67 +688,233 @@ class QuizEngine(ChatEngine):
             "total": len(self._quiz_items),
             "id": item.get('id', f'q{self._current_index + 1}'),
             "question": item.get('question', ''),
+            "question_type": item.get('question_type', 'choice'),
             "options": item.get('options', []),
             "explanation": item.get('explanation', '')
         }
 
     async def chat(self, user_input: str) -> str:
-        """
-        评估员工回答，推进到下一题
-
-        Args:
-            user_input: 员工回答（如 "A" 或 "1" ）
-
-        Returns:
-            AI 反馈和下一题或结果
-        """
+        """处理用户回答"""
         if self._current_index >= len(self._quiz_items):
-            return "测验已完成，感谢参与！"
+            return self._generate_result()
 
         current_item = self._quiz_items[self._current_index]
+        q_type = current_item.get('question_type', 'choice')
 
-        # 解析答案
-        answer = user_input.strip().upper()
-        if answer in ['A', 'B', 'C', 'D']:
-            selected = ['A', 'B', 'C', 'D'].index(answer)
-        elif answer.isdigit() and 0 <= int(answer) <= 3:
-            selected = int(answer)
-        else:
-            return f"请输入 A/B/C/D 或 0/1/2/3 格式的答案"
-
-        correct = current_item.get('correct_index', 0)
-        is_correct = selected == correct
-
-        self._answers.append(selected)
+        # 评分
+        result = await self._grade_answer(user_input, current_item, q_type)
+        self._answers.append(result)
+        self._total_score += result['score']
 
         # 构建反馈
-        feedback = f"第 {self._current_index + 1} 题：{'✅ 正确！' if is_correct else '❌ 错误！'}\n\n"
-        feedback += f"你的答案：{answer}\n"
-        feedback += f"正确答案：{['A', 'B', 'C', 'D'][correct]}\n\n"
-        feedback += f"题解：{current_item.get('explanation', '')}"
+        feedback = self._build_feedback(result, current_item, q_type)
 
         # 推进到下一题
         self._current_index += 1
 
         if self._current_index < len(self._quiz_items):
-            next_item = self.get_current_question()
-            feedback += f"\n\n📝 下一题（{self._current_index + 1}/{len(self._quiz_items)}）：\n"
-            feedback += f"{next_item['question']}\n"
-            for i, opt in enumerate(next_item['options']):
-                feedback += f"  {'ABCD'[i]}. {opt}\n"
+            feedback += self._build_next_question()
         else:
-            # 测验结束
-            correct_count = sum(1 for i, a in enumerate(self._answers) if i < len(self._quiz_items) and a == self._quiz_items[i].get('correct_index', 0))
-            score = (correct_count / len(self._quiz_items) * 100) if self._quiz_items else 0
-            passed = score >= 60
-
-            feedback += f"\n\n🎉 测验完成！\n"
-            feedback += f"得分：{score:.0f} 分（{correct_count}/{len(self._quiz_items)} 正确）\n"
-            feedback += f"结果：{'🎊 合格！' if passed else '📚 继续加油！'}"
+            feedback += self._generate_result()
 
         self.add_message("user", user_input)
         self.add_message("assistant", feedback)
         return feedback
+
+    async def _grade_answer(self, user_input: str, item: dict, q_type: str) -> dict:
+        """评分"""
+        answer = user_input.strip()
+        question_id = item.get('id', f'q{self._current_index + 1}')
+
+        if q_type == 'choice':
+            # 选择题
+            answer_upper = answer.upper()
+            if answer_upper in ['A', 'B', 'C', 'D']:
+                selected = ['A', 'B', 'C', 'D'].index(answer_upper)
+            elif answer.isdigit() and 0 <= int(answer) <= 3:
+                selected = int(answer)
+            else:
+                return {"question_id": question_id, "answer": answer, "correct": False, "score": 0}
+
+            correct = item.get('correct_index', 0)
+            is_correct = selected == correct
+            return {
+                "question_id": question_id,
+                "answer": answer,
+                "correct": is_correct,
+                "score": 20.0 if is_correct else 0  # 选择题 20 分
+            }
+
+        elif q_type == 'judge':
+            # 判断题
+            answer_lower = answer.lower()
+            is_correct = answer_lower in ['对', '错', 'true', 'false', 't', 'f', '1', '0', 'a', 'b']
+            correct_answer = item.get('correct_answer', 'true')
+            expected = '对' if correct_answer == 'true' else '错'
+            actual = answer
+            if answer_lower in ['true', 't', '1', 'a']:
+                actual = '对'
+            elif answer_lower in ['false', 'f', '0', 'b']:
+                actual = '错'
+
+            is_correct = actual == expected
+            return {
+                "question_id": question_id,
+                "answer": answer,
+                "correct": is_correct,
+                "score": 10.0 if is_correct else 0  # 判断题 10 分
+            }
+
+        elif q_type == 'short_answer':
+            # 简答题 - AI 评估
+            score = await self._grade_short_answer(answer, item)
+            is_correct = score >= 10  # 简答题 10 分以上算正确
+            return {
+                "question_id": question_id,
+                "answer": answer,
+                "correct": is_correct,
+                "score": score
+            }
+
+        return {"question_id": question_id, "answer": answer, "correct": False, "score": 0}
+
+    async def _grade_short_answer(self, user_answer: str, item: dict) -> float:
+        """AI 评估简答题"""
+        keywords = item.get('keywords', [])
+        question = item.get('question', '')
+        correct_answer = item.get('correct_answer', '')
+
+        # 标准化用户回答：去空格、去标点、转小写
+        normalized = re.sub(r'[\s\，。、！？：；""''（）【】]+', '', user_answer.lower())
+
+        if not keywords:
+            return 7.5  # 默认给 7.5 分
+
+        # 先尝试 AI 评估
+        prompt = f"""评估学员简答题回答。
+
+题目：{question}
+参考答案：{correct_answer}
+评分关键词：{', '.join(keywords)}
+
+学员回答：{user_answer}
+
+评估标准：
+- 包含全部关键词：15分
+- 包含大部分关键词（>=60%）：10-14分
+- 包含部分关键词（>=30%）：5-9分
+- 较少或没有关键词：0-4分
+
+请直接给出一个0-15的分数，只输出数字："""
+
+        try:
+            response = call_llm(prompt, "")
+            match = re.search(r'\d+', response.strip())
+            if match:
+                score = float(match.group())
+                return min(score, 15.0)
+        except Exception:
+            pass
+
+        # 改进的关键词匹配
+        matched = 0
+        for kw in keywords:
+            kw_norm = re.sub(r'[\s\，。、！？：；""''（）【】]+', '', kw.lower())
+            if kw_norm and kw_norm in normalized:
+                matched += 1
+            elif len(kw_norm) >= 2:
+                kw_chars = set(kw_norm)
+                answer_chars = set(normalized)
+                overlap = len(kw_chars & answer_chars)
+                if overlap >= len(kw_chars) * 0.7:
+                    matched += 0.5
+
+        ratio = matched / len(keywords) if keywords else 0
+
+        # 基于匹配率计算分数
+        if ratio >= 1.0:
+            base_score = 15.0
+        elif ratio >= 0.6:
+            base_score = 10.0 + (ratio - 0.6) / 0.4 * 4
+        elif ratio >= 0.3:
+            base_score = 5.0 + (ratio - 0.3) / 0.3 * 5
+        elif ratio > 0:
+            base_score = ratio / 0.3 * 5
+        else:
+            base_score = 0
+
+        # 答案长度奖励（详细程度）
+        min_len = len(correct_answer) * 0.5 if correct_answer else 20
+        len_ratio = min(len(user_answer) / max(min_len, 1), 1.5)
+        length_bonus = (len_ratio - 1) * 2 if len_ratio > 1 else 0
+
+        final_score = min(base_score + length_bonus, 15.0)
+        return max(final_score, 0)
+
+    def _build_feedback(self, result: dict, item: dict, q_type: str) -> str:
+        """构建单题反馈"""
+        feedback = f"第 {self._current_index + 1} 题：{'✅ 正确！' if result['correct'] else '❌ 错误！'}\n"
+        feedback += f"你的回答：{result['answer']}\n"
+
+        if q_type == 'choice':
+            correct = item.get('correct_index', 0)
+            feedback += f"正确答案：{'ABCD'[correct]}\n"
+        elif q_type == 'judge':
+            correct_answer = item.get('correct_answer', 'true')
+            expected = '对' if correct_answer == 'true' else '错'
+            feedback += f"正确答案：{expected}\n"
+
+        feedback += f"得分：{result['score']:.0f} 分\n"
+        feedback += f"题解：{item.get('explanation', '')}\n\n"
+
+        return feedback
+
+    def _build_next_question(self) -> str:
+        """构建下一题"""
+        next_item = self.get_current_question()
+        if not next_item:
+            return ""
+
+        q_type = next_item['question_type']
+        feedback = f"📝 下一题（{self._current_index + 1}/{len(self._quiz_items)}）：\n"
+        feedback += f"{next_item['question']}\n"
+
+        if q_type == 'choice':
+            for i, opt in enumerate(next_item['options']):
+                feedback += f"  {'ABCD'[i]}. {opt}\n"
+        elif q_type == 'judge':
+            feedback += "  A. 对  B. 错\n"
+        elif q_type == 'short_answer':
+            feedback += "  （请简述你的答案）\n"
+
+        return feedback
+
+    def _generate_result(self) -> str:
+        """生成考核结果"""
+        score = self._total_score
+        passed = score >= 70
+
+        feedback = f"\n{'='*40}\n"
+        feedback += f"🎉 考核完成！\n"
+        feedback += f"{'='*40}\n\n"
+        feedback += f"📊 总分：{score:.0f} 分\n"
+        feedback += f"📝 题数：{len(self._quiz_items)} 题\n"
+        feedback += f"✅ 正确：{sum(1 for a in self._answers if a['correct'])} 题\n"
+        feedback += f"📌 结果：{'🎊 合格！' if passed else '📚 不合格，需重新学习'}\n"
+
+        return feedback
+
+    def get_score(self) -> float:
+        """获取总分"""
+        return self._total_score
+
+    def is_passed(self) -> bool:
+        """是否通过"""
+        return self._total_score >= 70
+
+    def get_answers(self) -> list[dict]:
+        """获取所有答案"""
+        return self._answers
 
 
 # ========== 工厂函数 ==========

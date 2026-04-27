@@ -225,10 +225,27 @@ class CourseGenerator:
         combined_system = """你是一个专业的企业培训课件生成专家。根据客户的需求描述和提供的参考资料，生成符合企业实际培训需要的课件。
 
 核心原则：
-1. 课件内容必须紧密围绕用户的需求描述，不能偏离
+1. 课件内容必须紧密围绕用户的需求描述，根据需求复杂度确定模块数量（1-5个）
 2. 充分利用参考知识库中的真实内容，不要凭空编造
 3. 语言专业、简洁、易懂，符合成人学习规律
-4. 结构清晰：每个章节包含【学习目标】【核心内容】【案例】【练习】
+4. 只输出讲义内容，不包含需求描述、思考过程、分析推理
+
+推荐课件结构：
+## 模块N：核心要点名称
+   ### 要点（1-2个核心概念定义）
+   ### 实践方法（具体做法/步骤）
+   ### 应用场景（1-2句话，不展开案例）
+   ### 自检清单（3-5个检查项，学完自测用）
+
+## 总结
+   - 3-5条核心要点
+
+禁止生成的内容：
+- 不要生成"开篇"、"培训目标"、"培训场景"、"学习目标"等章节
+- 不要生成"需求"、"思考"、"分析"、"行动计划"等章节
+- 不要生成"研究表明..."、"让我们思考..."、"问题分析..."等引导性内容
+- 不要生成大段案例分析
+- 不要生成生成过程中的推理说明
 
 测验题目要求：
 1. 每道题为单选题，测试学员对关键知识点的理解
@@ -243,7 +260,7 @@ class CourseGenerator:
 
 【培训主题】{topic}
 【需求描述】{description}
-【章节数量】{num_chapters} 章
+【模块数量】由 AI 根据需求复杂度自行决定（1-5个）
 【测验题数量】{num_quiz} 道
 
 ## 参考知识库内容
@@ -251,14 +268,15 @@ class CourseGenerator:
 
 ## 输出要求
 
-请严格按照上述【需求描述】生成课件。课件内容必须：
-1. 解决用户描述的具体问题或需求
-2. 结合参考知识库中的真实案例和数据
-3. 提供可操作的建议或步骤
+请严格按照【需求描述】生成课件：
+1. 根据需求复杂度决定模块数量（简单主题1-2个，复杂主题3-5个）
+2. 模块数量要匹配需求的实际内容，不要为凑数而拆分
+3. 结合参考知识库中的真实内容，不要凭空编造
+4. 提供可操作的实践方法，不要空泛的理论描述
 
 输出格式（JSON）：
 {{
-  "content": "课件的Markdown内容，包含{num_chapters}个章节",
+  "content": "课件的Markdown内容，结构参考【推荐课件结构】",
   "quiz_items": [
     {{
       "id": "q1",
@@ -270,7 +288,7 @@ class CourseGenerator:
   ]
 }}
 
-请直接输出JSON，不要有其他内容："""
+请直接输出JSON，JSON块外不得有任何其他内容（包括思考过程、说明文字等）："""
 
         try:
             combined_response = call_llm(combined_prompt, combined_system)
@@ -316,7 +334,7 @@ class CourseGenerator:
         if not text:
             return None
 
-        # 清理思考过程标记
+        # 清理思考过程标记（外层）
         text = re.sub(r'<think>[\s\S]*?</think>', '', text)
         text = re.sub(r'<[^>]+>', '', text)
         text = text.strip()
@@ -325,6 +343,9 @@ class CourseGenerator:
         try:
             result = json.loads(text)
             if isinstance(result, dict):
+                # 清理 content 字段中的思考过程标记
+                if 'content' in result and isinstance(result['content'], str):
+                    result['content'] = self._clean_thinking_markers(result['content'])
                 return result
         except:
             pass
@@ -335,6 +356,9 @@ class CourseGenerator:
             try:
                 result = json.loads(match.group(1).strip())
                 if isinstance(result, dict):
+                    # 清理 content 字段中的思考过程标记
+                    if 'content' in result and isinstance(result['content'], str):
+                        result['content'] = self._clean_thinking_markers(result['content'])
                     return result
             except:
                 pass
@@ -344,6 +368,9 @@ class CourseGenerator:
             try:
                 result = json.loads(block_match.group(1).strip())
                 if isinstance(result, dict):
+                    # 清理 content 字段中的思考过程标记
+                    if 'content' in result and isinstance(result['content'], str):
+                        result['content'] = self._clean_thinking_markers(result['content'])
                     return result
             except:
                 pass
@@ -359,15 +386,30 @@ class CourseGenerator:
                 try:
                     result = json.loads(text[start:end + 1])
                     if isinstance(result, dict):
+                        # 清理 content 字段中的思考过程标记
+                        if 'content' in result and isinstance(result['content'], str):
+                            result['content'] = self._clean_thinking_markers(result['content'])
                         return result
                 except:
                     continue
 
         return None
 
-
-# 全局实例
-_generator: Optional[CourseGenerator] = None
+    
+    def _clean_thinking_markers(self, text: str) -> str:
+        """清理文本中的思考过程标记"""
+        if not text:
+            return text
+        # 分步移除 <think>...</think> 块
+        import re
+        # 用变量避免字符串解析问题
+        think_start = '<think>'
+        think_end = '</think>'
+        # 移除 <think>...</think> 块
+        text = re.sub(think_start + r'[\s\S]*?' + think_end, '', text)
+        # 移除 XML 标签
+        text = re.sub(r'<[^>]+>', '', text)
+        return text.strip()
 
 
 def get_course_generator() -> CourseGenerator:

@@ -152,6 +152,18 @@ class Database:
                 FOREIGN KEY (progress_id) REFERENCES learning_progress(id)
             );
 
+            CREATE TABLE IF NOT EXISTS quiz_records (
+                id TEXT PRIMARY KEY,
+                progress_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                total_score REAL NOT NULL,
+                passed INTEGER NOT NULL,
+                attempts INTEGER DEFAULT 0,
+                answers TEXT DEFAULT '[]',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (progress_id) REFERENCES learning_progress(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_employees_role ON training_employees(role);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON training_tasks(status);
             CREATE INDEX IF NOT EXISTS idx_progress_employee ON learning_progress(employee_id);
@@ -252,6 +264,23 @@ class Database:
             return True
         except Exception as e:
             logger.error(f"更新任务状态失败: {e}")
+            return False
+
+    def update_training_task(self, task_id: str, updates: dict) -> bool:
+        """更新任务字段"""
+        if not updates:
+            return False
+        try:
+            set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
+            values = list(updates.values()) + [task_id]
+            with self.get_cursor() as c:
+                c.execute(
+                    f"UPDATE training_tasks SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    values
+                )
+            return True
+        except Exception as e:
+            logger.error(f"更新任务失败: {e}")
             return False
 
     def delete_training_task(self, task_id: str) -> bool:
@@ -369,6 +398,31 @@ class Database:
         """获取测验结果"""
         with self.get_cursor() as c:
             c.execute("SELECT * FROM quiz_results WHERE progress_id = ? ORDER BY submitted_at DESC",
+                     (progress_id,))
+            return [dict(row) for row in c.fetchall()]
+
+    def insert_quiz_record(self, record: dict) -> bool:
+        """插入考核记录"""
+        try:
+            with self.get_cursor() as c:
+                c.execute(
+                    """INSERT INTO quiz_records
+                       (id, progress_id, task_id, total_score, passed, attempts, answers)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (record['id'], record['progress_id'], record['task_id'],
+                     record['total_score'], 1 if record['passed'] else 0,
+                     record.get('attempts', 0),
+                     json.dumps(record.get('answers', [])))
+                )
+            return True
+        except Exception as e:
+            logger.error(f"插入考核记录失败: {e}")
+            return False
+
+    def get_quiz_records(self, progress_id: str) -> list[dict]:
+        """获取考核记录"""
+        with self.get_cursor() as c:
+            c.execute("SELECT * FROM quiz_records WHERE progress_id = ? ORDER BY created_at DESC",
                      (progress_id,))
             return [dict(row) for row in c.fetchall()]
 

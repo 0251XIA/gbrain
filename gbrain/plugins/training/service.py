@@ -132,6 +132,15 @@ class TrainingService:
         """删除任务"""
         return self.db.delete_training_task(task_id)
 
+    def update_task(self, task_id: str, **kwargs) -> bool:
+        """更新任务内容"""
+        allowed = ['content', 'description', 'title', 'deadline', 'priority']
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        updates['updated_at'] = datetime.now().isoformat()
+        return self.db.update_training_task(task_id, updates)
+
     def _dict_to_task(self, data: dict) -> TrainingTask:
         quiz_items = []
         if data.get('quiz_items'):

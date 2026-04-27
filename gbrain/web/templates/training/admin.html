@@ -490,16 +490,23 @@ async function generateCourse() {
     }, 60000);
 
     try {
+        // 合并上传的文件和选择的知识库文件的 page_id
+        const uploadedPageIds = uploadedFiles.map(f => f.page_id);
+        const allPageIds = [...uploadedPageIds, ...selectedKbFiles];
+
+        const requestData = {
+            topic,
+            description,
+            num_chapters: numChapters,
+            training_type: trainingType,
+            content_source: allPageIds.length > 0 ? allPageIds : []
+        };
+        console.log('【请求数据】', JSON.stringify(requestData, null, 2));
+
         const genRes = await fetch('/api/training/admin/course/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                topic,
-                description,
-                num_chapters: numChapters,
-                training_type: trainingType,
-                content_source: selectedKbFiles.length > 0 ? selectedKbFiles : []
-            }),
+            body: JSON.stringify(requestData),
             signal: AbortSignal.timeout(timeoutMs)
         });
 
@@ -614,6 +621,7 @@ async function loadAdminData() {
                         <span class="status-badge ${'status-' + (t.status === 'published' ? 'in-progress' : t.status === 'archived' ? 'completed' : 'pending')}">${t.status_text}</span>
                     </div>
                     <div>
+                        <button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; margin-right: 0.5rem;" onclick="regenerateTask('${t.id}')">清理内容</button>
                         ${t.status === 'draft' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="publishTask('${t.id}')">发布</button>` : ''}
                         ${t.status === 'published' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="archiveTask('${t.id}')">归档</button>` : ''}
                         ${t.status === 'archived' ? `<button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" onclick="publishTask('${t.id}')">重新发布</button>` : ''}
@@ -667,6 +675,95 @@ function archiveTask(taskId) {
     fetch(`/api/training/admin/task/${taskId}/archive`, { method: 'POST' })
         .then(res => res.json())
         .then(data => data.success && loadAdminData());
+}
+
+function regenerateTask(taskId) {
+    if (!confirm('确定要清理此任务的内容吗？清理后将移除所有 AI 思考过程标记。')) return;
+    fetch(`/api/training/learn-by-task/${taskId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.content) {
+                alert('任务没有内容');
+                return;
+            }
+            // 清理内容中的思考过程
+            const cleaned = extractLectureContent(data.content);
+            return fetch(`/api/training/admin/task/${taskId}/regenerate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: cleaned })
+            });
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('清理完成！');
+                loadAdminData();
+            } else {
+                alert('清理失败: ' + (data.error || '未知错误'));
+            }
+        })
+        .catch(e => alert('清理失败: ' + e));
+}
+
+// 提取纯讲义内容（复用 learn.html 中的逻辑）
+function extractLectureContent(content) {
+    if (!content) return '';
+    const lines = content.split('\n');
+    const result = [];
+    const excludePatterns = [
+        /^[#]*\s*[主题受众需求时长培训]+[：:]/,
+        /^## 基本信息/,
+        /通过本培训，您将掌握/,
+        /本章将介绍.*相关知识和技能/,
+        /^>\s*.*想象.*场景/,
+        /^[>！].*$/,
+        /^【.*】.*/
+    ];
+    const excludeKeywords = [
+        '研究表明',
+        '想象这样',
+        '让我们从',
+        '某科技公司在',
+        '问题分析',
+        '启示：',
+        '从本质上说'
+    ];
+    let skipUntilHeading = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        if (trimmedLine === '') continue;
+
+        if (/^## [^#]/.test(trimmedLine)) {
+            skipUntilHeading = false;
+        }
+
+        if (i < 10 && /^(# |## |想象|让我们|首先|其次|最后)/.test(trimmedLine)) {
+            if (/^(# |## [^#])/.test(trimmedLine)) {
+                result.push(line);
+            }
+            continue;
+        }
+
+        if (excludePatterns.some(p => p.test(trimmedLine))) continue;
+
+        if (excludeKeywords.some(kw => trimmedLine.includes(kw))) continue;
+
+        if (trimmedLine.includes('让我们从一个问题开始')) {
+            skipUntilHeading = true;
+            continue;
+        }
+        if (skipUntilHeading && !/^(# |## [^#])/.test(trimmedLine)) {
+            continue;
+        }
+
+        result.push(line);
+    }
+
+    return result.join('\n');
 }
 
 // 初始化

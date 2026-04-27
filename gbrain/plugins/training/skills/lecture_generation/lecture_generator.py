@@ -73,6 +73,19 @@ class LectureGenerator:
 
     def _build_knowledge_context(self, integrated: IntegratedContent) -> str:
         """构建知识库上下文，用于 prompt"""
+        import sys
+
+        # 计算每个模块的字符数
+        module_chars = {k: sum(len(c) for c in v) for k, v in integrated.module_contents.items()}
+        module_info = {k: f"{len(v)}items/{module_chars[k]}chars" for k, v in integrated.module_contents.items()}
+        min_module_chars = min(module_chars.values()) if module_chars else 0
+
+        sys.stderr.write(f"[LectureGenerator] START _build_knowledge_context\n")
+        sys.stderr.write(f"[LectureGenerator] module_contents={module_info}\n")
+        sys.stderr.write(f"[LectureGenerator] min_module_chars={min_module_chars}, threshold=1500\n")
+        sys.stderr.write(f"[LectureGenerator] raw_file_contents={len(integrated.raw_file_contents)} items\n")
+        sys.stderr.flush()
+
         parts = []
         seen_contents = set()  # 用于去重
 
@@ -101,14 +114,22 @@ class LectureGenerator:
                     seen_contents.add(res_text)
                     parts.append(f"\n## 配套资源\n{res_text}")
 
-        # 如果模块内容太少（总字数 < 1500），使用原始文件内容补充
-        total_module_chars = sum(len(c) for contents in integrated.module_contents.values() for c in contents)
-        if total_module_chars < 1500 and integrated.raw_file_contents:
+        # 补充策略：如果任何模块内容 < 1500 chars，使用原始文件内容补充
+        if min_module_chars < 1500 and integrated.raw_file_contents:
+            sys.stderr.write(f"[LectureGenerator] SUPPLEMENT triggered: min_module_chars={min_module_chars} < 1500\n")
             raw_content = "\n\n".join(integrated.raw_file_contents)
             if raw_content not in seen_contents:
                 parts.insert(0, f"## 知识库原始内容\n{raw_content}")
+                sys.stderr.write(f"[LectureGenerator] Added raw content, len={len(raw_content)}\n")
+                sys.stderr.flush()
+        else:
+            sys.stderr.write(f"[LectureGenerator] SUPPLEMENT NOT triggered: min_module_chars={min_module_chars}, raw_file_contents={len(integrated.raw_file_contents)}\n")
+            sys.stderr.flush()
 
-        return "\n\n".join(parts) if parts else "（暂无知识库内容）"
+        result = "\n\n".join(parts) if parts else "（暂无知识库内容）"
+        sys.stderr.write(f"[LectureGenerator] FINAL knowledge_context length={len(result)}\n")
+        sys.stderr.flush()
+        return result
 
     def _generate_lecture(self, parsed: ParsedPrompt, integrated: IntegratedContent, knowledge_context: str, training_type: str) -> str:
         """生成培训讲义"""
@@ -124,25 +145,38 @@ class LectureGenerator:
 
 结构：{task_instructions}
 
-【重要】输出格式必须遵循：
+【重要-输出格式要求】
 1. 直接以「## 开篇」作为开头
 2. 不要输出任何「主题：」「受众：」「需求：」「描述：」「根据XXX」等字样
-3. 只输出纯讲义Markdown内容"""
+3. 只输出纯讲义Markdown内容
+4. 禁止在讲义内容前输出任何思考过程、推理说明或中间分析"""
 
         system_prompt = """你是企业培训专家。
 【强制要求】
 - 输出必须直接以「## 开篇」开头，不要有任何前缀说明
 - 禁止输出「主题：」「受众：」「需求：」「描述：」「根据XXX」「以下为XXX」等字样
 - 禁止复制输入的原文
-- 只输出纯讲义内容，每个章节必须有实质性内容"""
+- 只输出纯讲义内容，每个章节必须有实质性内容
+- 禁止输出思考过程、推理说明、中间分析
+- 直接输出讲义内容，不要有任何前置说明"""
 
         try:
             result = call_llm(prompt, system_prompt)
             if result and result.strip():
-                return result.strip()
+                # 清理思考过程标记
+                return self._clean_thinking_markers(result.strip())
             raise Exception("LLM 返回空内容")
         except Exception as e:
             raise Exception(f"AI 生成讲义失败: {str(e)}") from e
+
+    def _clean_thinking_markers(self, text: str) -> str:
+        """清理文本中的思考过程标记"""
+        import re
+        think_start = '<think>'
+        think_end = '</think>'
+        text = re.sub(think_start + r'[\s\S]*?' + think_end, '', text)
+        text = re.sub(r'<[^>]+>', '', text)
+        return text.strip()
 
     def _build_lecture_instructions(self, parsed: ParsedPrompt, integrated: IntegratedContent, training_type: str) -> str:
         """构建讲义生成指令"""
@@ -171,7 +205,7 @@ class LectureGenerator:
         prompt = f"""# 任务：生成数字人口播培训脚本
 
 ## 角色
-你是专业的**新人培训数字人口播内容扩写专家**。
+你是资深的企业培训讲义生成大师。你的核心任务是基于企业提供的知识文件，生成一本结构严谨、内容落地、语言鲜活的新人培训"活讲义"。你既要保证知识的准确性，也要让内容具备"数字人口播"般的自然与生动，让新人看得懂、学得会、做得对。
 
 ## 基本信息
 - 主题：{parsed.topic}
@@ -187,30 +221,44 @@ class LectureGenerator:
 
 ## 输出格式
 
-### 0. 课程定位
-- 适用对象
-- 培训目标
-- 课程时长建议
+### 0. 课程定位与导航
+-适用对象画像：用一两句话勾勒出新人的岗位痛点与期待。
+-核心培训目标：提炼本次培训要解决的具体问题。
+-时长分配建议：给出开场、讲授、演练、测评各环节的分钟数。
+
 
 ### 1. 课程开场白
-数字人口播稿（打招呼、课程介绍、学习目标预告）
+以亲切的问候和共情切入，点出新人的常见困惑。
+清晰预告本次课程的学习路径与收获，激发期待。
+语言要求：像资深导师在迎新会上聊天，自然、有感染力。
 
 ### 2. 知识点梳理
 表格：原始章节 | 核心知识点 | 新人必须掌握的行为
 
-### 3. 分章节口播正文
-每个章节包含：
-- 原始资料对应内容
-- 数字人口播稿（口语化扩写）
-- 新人易错点
-- 正确示范
-- 错误示范
+### 3. 分章节讲义内容（正文）
+每章包含5个模块，形成"学、讲、练、示"闭环：
+📚 原始知识锚点：摘录对应的知识库原文，确保师出有名。
+🎙️ 数字人讲师口播稿：
+   -对原文进行口语化、场景化扩写。
+   -多用类比、举例、设问等手法，把枯燥的条文转化为生动的讲解。
+   -严守边界：只对原文进行解释和举例，不新增规则。
+⚠️ 新人避坑指南：列出该知识点下新人最容易犯的1-2个具体错误。
+✅ 正确示范：用一段话或一个动作描述，展示规范做法。
+❌ 错误还原：用一段话或一个动作描述，展示典型错误（需有明显错误标签）。
+
 
 ### 4. 场景化演练（至少4个）
-每个场景：背景 / 正确做法 / 数字人示范话术 / 观察要点
+设置贴近真实工作的情境，让新人"做中学"：
+工作场景：描述一个具体、真实的任务背景。
+演练要求：给出需要新人完成的具体动作或决策。
+观察要点：列出讲师观察新人表现的核查点。
+✅ 示范话术/行为：提供一个标准答案式的正确应对范本。
 
 ### 5. 课后小测（10题：单选+判断+场景题）
-题目、选项、答案、解析
+检验核心知识掌握情况，形式多样化：
+ 题型构成：单选题、判断题、基于场景的最佳实践题。
+ 每题提供：题目、选项（如有）、正确答案、详细解析。
+ 解析原则：不仅解惑，更要回归到知识库原文或演练要点。
 
 ### 6. 新人自查清单
 表格：检查项 | 是否做到 | 备注
@@ -222,16 +270,19 @@ class LectureGenerator:
 
 直接输出 Markdown 格式口播稿内容："""
 
-        system_prompt = """你是一个专业的新人培训数字人口播内容扩写专家。
+        system_prompt = """你是资深的企业培训讲义生成大师。你的核心任务是基于企业提供的知识文件，生成一本结构严谨、内容落地、语言鲜活的新人培训"活讲义"。你既要保证知识的准确性，也要让内容具备"数字人口播"般的自然与生动，让新人看得懂、学得会、做得对。
 - 风格：自然口语化、像资深培训师面对面授课
 - 原则：保守扩写，仅基于原始资料扩展，绝不编造未提及的内容
 - 禁止编造公司制度、考核标准、处罚规则
-- 不确定内容标注【需人工确认】"""
+- 不确定内容标注【需人工确认】
+- 禁止输出思考过程、推理说明、中间分析
+- 直接输出讲义内容，不要有任何前置说明"""
 
         try:
             result = call_llm(prompt, system_prompt)
             if result and result.strip():
-                return result.strip()
+                # 清理思考过程标记
+                return self._clean_thinking_markers(result.strip())
             raise Exception("LLM 返回空内容")
         except Exception as e:
             raise Exception(f"AI 生成脚本失败: {str(e)}") from e

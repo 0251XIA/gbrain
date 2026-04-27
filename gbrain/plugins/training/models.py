@@ -25,7 +25,8 @@ class LearningState(Enum):
     """学习状态"""
     NOT_STARTED = "not_started"    # 未开始
     LEARNING = "learning"          # 进行中
-    QUIZ_FAILED = "quiz_failed"    # 测验不及格
+    QUIZ_FAILED = "quiz_failed"    # 测验不及格（可重考）
+    NEEDS_RELEARN = "needs_relearn"  # 需重新学习（重考2次都不通过）
     COMPLETED = "completed"        # 已完成
     MASTERED = "mastered"          # 已掌握
 
@@ -56,9 +57,12 @@ class QuizItem:
     """测验题"""
     id: str
     question: str
-    options: list[str]           # 选项列表
-    correct_index: int            # 正确答案索引
-    explanation: str = ""         # 题解
+    question_type: str = "choice"  # choice | judge | short_answer
+    options: list[str] = field(default_factory=list)  # 选择题选项
+    correct_index: int = 0  # 选择题正确答案索引
+    correct_answer: str = ""  # 判断题答案 (true/false) | 简答题参考答案
+    explanation: str = ""  # 题解
+    keywords: list[str] = field(default_factory=list)  # 简答题评分关键词
 
 
 @dataclass
@@ -102,6 +106,19 @@ class QuizResult:
     employee_id: str
     task_id: str
     score: float                  # 0-100
-    passed: bool                  # >= 60% 为通过
+    passed: bool                  # >= 70% 为通过
     answers: list[int]            # 员工答案列表
     submitted_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class QuizRecord:
+    """考核记录（详细）"""
+    id: str
+    progress_id: str
+    task_id: str
+    total_score: float  # 总分 0-100
+    passed: bool  # >= 70% 为通过
+    attempts: int = 0  # 第几次考核
+    answers: list[dict] = field(default_factory=list)  # 每题答案详情
+    created_at: datetime = field(default_factory=datetime.now)

@@ -1,48 +1,141 @@
 import re
+import logging
 from .models import ParsedPrompt, IntegratedContent, SYNONYM_MAP
+
+logger = logging.getLogger(__name__)
+DEBUG_FILE = '/tmp/debug_integrator.txt'
 
 
 class ContentIntegrator:
     def integrate(self, parsed: ParsedPrompt, file_contents: list[str]) -> IntegratedContent:
         """按大纲结构分配内容，碎片化内容结构化整合"""
+        with open(DEBUG_FILE, 'a') as f:
+            f.write(f"[ContentIntegrator] START: {len(file_contents)} files, chars={sum(len(c) for c in file_contents)}\n")
+            f.write(f"[ContentIntegrator] parsed.outline_structure={parsed.outline_structure}\n")
+            if file_contents:
+                f.write(f"[ContentIntegrator] file_contents[0][:300]={file_contents[0][:300]}\n")
+
         module_contents: dict[str, list[str]] = {}
-
-        # 获取模块列表
         modules = self._get_modules_from_outline(parsed.outline_structure)
+        with open(DEBUG_FILE, 'a') as f:
+            f.write(f"[ContentIntegrator] modules={modules}\n")
 
-        # 初始化模块内容
         for module in modules:
             module_contents[module] = []
 
-        # 收集未分配的内容
         fallback_pool: list[str] = []
 
-        # 分配文件内容到模块
-        for content in file_contents:
-            distributed = self._distribute_content(content, module_contents, modules)
-            if not distributed:
-                fallback_pool.append(content)
+        # 智能拆分并分配内容
+        for file_content in file_contents:
+            sections = self._split_content_by_sections(file_content)
+            with open(DEBUG_FILE, 'a') as f:
+                f.write(f"[ContentIntegrator] split into {len(sections)} sections\n")
+                for i, sec in enumerate(sections[:5]):
+                    f.write(f"[ContentIntegrator] section[{i}]={sec[:80]}...\n")
 
-        # Fallback 池处理：按学习目标关键词重新匹配
+            for section in sections:
+                distributed = self._distribute_content(section, module_contents, modules)
+                if not distributed:
+                    fallback_pool.append(section)
+
+        with open(DEBUG_FILE, 'a') as f:
+            f.write(f"[ContentIntegrator] after distribute: fallback_pool={len(fallback_pool)}, module_chars={dict((k, sum(len(c) for c in v)) for k,v in module_contents.items())}\n")
+
         if fallback_pool and parsed.objectives:
             self._process_fallback_pool(fallback_pool, module_contents, modules, parsed.objectives)
         elif fallback_pool and modules:
-            # 如果没有学习目标但有模块未分配，则分配给第一个模块
-            for content in fallback_pool:
-                module_contents[modules[0]].append(content)
+            empty_modules = [m for m in modules if not module_contents[m]]
+            if empty_modules:
+                for content in fallback_pool:
+                    for mod in empty_modules:
+                        module_contents[mod].append(content)
+            else:
+                for content in fallback_pool:
+                    for mod in modules:
+                        module_contents[mod].append(content)
 
-        # 提取案例库
+        with open(DEBUG_FILE, 'a') as f:
+            f.write(f"[ContentIntegrator] after fallback: module_chars={dict((k, sum(len(c) for c in v)) for k,v in module_contents.items())}\n")
+
         case_library = self._extract_cases(file_contents)
-
-        # 提取配套材料
         supplementary = self._extract_supplementary(file_contents)
+
+        all_module_chars = sum(len(c) for contents in module_contents.values() for c in contents)
+        if file_contents and all_module_chars > 0:
+            empty_modules = [m for m in modules if not module_contents[m]]
+            if empty_modules:
+                with open(DEBUG_FILE, 'a') as f:
+                    f.write(f"[ContentIntegrator] supplementing empty modules: {empty_modules}\n")
+                for empty_mod in empty_modules:
+                    for src_mod in modules:
+                        if module_contents[src_mod]:
+                            module_contents[empty_mod].extend(module_contents[src_mod][:1])
+                            break
+
+        with open(DEBUG_FILE, 'a') as f:
+            f.write(f"[ContentIntegrator] FINAL: module_chars={dict((k, sum(len(c) for c in v)) for k,v in module_contents.items())}\n")
 
         return IntegratedContent(
             module_contents=module_contents,
             case_library=case_library,
             supplementary_materials=supplementary,
-            raw_file_contents=file_contents  # 保存原始内容
+            raw_file_contents=file_contents
         )
+
+    def _split_content_by_sections(self, content: str) -> list[str]:
+        """按章节拆分 KB 内容"""
+        lines = content.split('\n')
+
+        def is_likely_title(line: str) -> bool:
+            stripped = line.strip()
+            # 基本检查：长度 4-20
+            if not (4 <= len(stripped) <= 20):
+                return False
+            # 不以列表符号开头
+            if re.match(r'^[\-\*\d]', stripped):
+                return False
+            # 排除带冒号的描述性内容
+            if '：' in stripped or ':' in stripped:
+                return False
+            # 排除以"的"结尾的描述性标题
+            if stripped.endswith('的'):
+                return False
+            # 排除包含较多描述性文字的标题
+            if '的' in stripped and len(stripped) > 6:
+                return False
+            # 以中文为主
+            chinese = re.findall(r'[一-龥]', stripped)
+            if len(chinese) < len(stripped) * 0.5:
+                return False
+            # 后面是空行
+            try:
+                idx = lines.index(line)
+                if idx + 1 >= len(lines) or lines[idx + 1].strip() != '':
+                    return False
+            except ValueError:
+                return False
+            return True
+
+        # 找出章节标题行
+        section_starts = []
+        for i, line in enumerate(lines):
+            if is_likely_title(line):
+                section_starts.append(i)
+
+        # 按章节分割
+        sections = []
+        for i, start_idx in enumerate(section_starts):
+            end_idx = section_starts[i + 1] if i + 1 < len(section_starts) else len(lines)
+            chapter_lines = lines[start_idx:end_idx]
+            while chapter_lines and not chapter_lines[-1].strip():
+                chapter_lines.pop()
+            if chapter_lines:
+                sections.append('\n'.join(chapter_lines))
+
+        if len(sections) < 2:
+            return [content]
+
+        return sections
 
     def _get_modules_from_outline(self, outline: dict) -> list[str]:
         modules = []
@@ -52,30 +145,22 @@ class ContentIntegrator:
         return modules
 
     def _extract_keywords(self, text: str) -> list[str]:
-        """提取关键词，中文使用2-gram滑动窗口，英文/数字使用单词"""
         keywords = []
-        # 英文/数字词
         english_words = re.findall(r'[a-zA-Z0-9]+', text)
         keywords.extend([w for w in english_words if len(w) > 1])
-
-        # 中文2-gram滑动窗口
         chinese_text = re.sub(r'[a-zA-Z0-9\s]', '', text)
         for i in range(len(chinese_text) - 1):
             kw = chinese_text[i:i+2]
             if kw not in keywords:
                 keywords.append(kw)
-
         return [k for k in keywords if len(k) > 1]
 
     def _process_fallback_pool(self, fallback_pool: list[str], module_contents: dict[str, list[str]], modules: list[str], objectives: list[str]):
-        """将未分配内容按学习目标关键词重新分配"""
-        # 提取学习目标关键词（使用改进的中文切分）
         objective_keywords: list[str] = []
         for obj in objectives:
             keywords = self._extract_keywords(obj)
             objective_keywords.extend(keywords)
 
-        # 尝试用学习目标关键词匹配
         for content in fallback_pool:
             best_module = None
             best_score = 0
@@ -84,106 +169,66 @@ class ContentIntegrator:
                 if score > best_score:
                     best_score = score
                     best_module = module
-
             if best_module and best_score > 0:
                 module_contents[best_module].append(content)
             elif modules:
-                # 仍有剩余则分配给第一个模块
                 module_contents[modules[0]].append(content)
 
     def _distribute_content(self, content: str, module_contents: dict[str, list[str]], modules: list[str]) -> bool:
-        """将内容分配到对应模块，返回是否分配成功"""
-        # 数字映射：阿拉伯数字 -> 中文数字
+        """分配内容到最佳匹配的模块"""
         digit_map = {'1': '一', '2': '二', '3': '三', '4': '四', '5': '五',
                      '6': '六', '7': '七', '8': '八', '9': '九', '0': '零'}
 
-        # 构建每个模块的关键词集合（含同义词扩展）
-        module_keywords: dict[str, list[str]] = {}
-        for module in modules:
-            keywords = re.findall(r'[\w]+', module)
-            stopwords = {'模块', '章节', '第', '一', '二', '三', '四', '五', '的', '和'}
-            keywords = [k for k in keywords if k not in stopwords and len(k) > 1]
-
-            # 处理 "第X章" 模式：同时添加中文数字变体
-            chinese_num_keywords = set()
-            for kw in keywords:
-                if re.match(r'^\d+章$', kw):  # 如 "1章", "2章"
-                    chinese = ''.join(digit_map.get(c, c) for c in kw)
-                    chinese_num_keywords.add(chinese)  # 如 "一章"
-                elif re.match(r'^[零一二三四五六七八九]+章$', kw):  # 如 "一章"
-                    arabic = kw[:-1]  # 去掉"章"
-                    # 转回阿拉伯数字（简化处理）
-                    rev_map = {'零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
-                              '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'}
-                    arabic_num = ''.join(rev_map.get(c, c) for c in arabic) + '章'
-                    chinese_num_keywords.add(arabic_num)
-
-            keywords = list(set(keywords) | chinese_num_keywords)
-
-            # 同义词扩展
-            expanded = set(keywords)
-            for kw in keywords:
-                if kw in SYNONYM_MAP:
-                    expanded.update(SYNONYM_MAP[kw])
-            module_keywords[module] = list(expanded)
-
-        def _keyword_matches(keyword: str, text: str) -> bool:
-            """检查关键词是否在文本中（支持中文）"""
-            # 直接包含
-            if keyword in text:
-                return True
-            # 中文关键词4+字时，检查2-char子串匹配
-            if len(keyword) >= 4 and all('\u4e00' <= c <= '\u9fff' for c in keyword):
-                # 使用滑动窗口检查是否有2-char子串在text中
-                for i in range(len(keyword) - 1):
-                    sub = keyword[i:i+2]
-                    if sub in text:
-                        return True
-            return False
-
-        # 计算每个模块的匹配分数
+        # 改进：优先使用完整模块名匹配
         module_scores: dict[str, int] = {}
         for module in modules:
             score = 0
-            for keyword in module_keywords[module]:
-                if _keyword_matches(keyword, content):
+            # 1. 完整模块名匹配（高权重）
+            if module in content:
+                score += 10  # 完整匹配给高分
+            # 2. 拆分关键词匹配（较低权重）
+            keywords = re.findall(r'[\w]+', module)
+            stopwords = {'模块', '章节', '第', '一', '二', '三', '四', '五', '的', '和'}
+            keywords = [k for k in keywords if k not in stopwords and len(k) > 1]
+            for kw in keywords:
+                if kw in content:
                     score += 1
             module_scores[module] = score
 
-        # 多模块分配：仅分配给得分最高的模块（避免内容重复）
-        # 如果最高分为0（没有匹配），不分配
+        # 找最高分
         max_score = max(module_scores.values()) if module_scores else 0
         if max_score == 0:
+            with open(DEBUG_FILE, 'a') as f:
+                f.write(f"[ContentIntegrator] _distribute: no match for content (first 100): {content[:100]}\n")
             return False
 
-        # 找到得分最高的第一个模块
+        # 找最佳模块（优先选择得分最高的，如果有多于1个模块得分相同，选择最短的避免模糊匹配）
         best_module = None
+        best_score = -1
         for module, score in module_scores.items():
-            if score == max_score:
+            if score > best_score:
+                best_score = score
                 best_module = module
-                break
+            elif score == best_score == best_score:
+                # 得分相同时，选择最短的模块名（更精确）
+                if len(module) < len(best_module):
+                    best_module = module
 
         if best_module:
             module_contents[best_module].append(content)
+            with open(DEBUG_FILE, 'a') as f:
+                f.write(f"[ContentIntegrator] _distribute: assigned to '{best_module}' with score {max_score}\n")
             return True
-
         return False
 
     def _extract_cases(self, file_contents: list[str]) -> list[dict]:
-        """从文件内容中提取案例，使用多种模式匹配"""
         cases = []
-        # 案例模式：匹配"案例"或"case"开头的独立段落或章节
         case_patterns = [
-            # 模式1: "案例N：" 或 "案例N：" 后面跟内容（完整段落）
             re.compile(r'案例\s*[\d零一二三四五六七八九十百]+[：:]\s*(.{20,})?(?=\n\n|\n案例|\Z)', re.DOTALL),
-            # 模式2: "案例：" 后面跟内容（完整段落）
             re.compile(r'案例\s*：[：:]\s*(.{20,})?(?=\n\n|\Z)', re.DOTALL),
-            # 模式3: 独立的案例标题行后面跟内容段落
             re.compile(r'^#{1,3}\s*案例[^\n]*\n+(.{20,})?(?=\n#{1,3}\s|\Z)', re.DOTALL | re.MULTILINE),
-            # 模式4: "CASE" 或 "Case" 开头的内容块
             re.compile(r'(?:^|\n)(CASE|case|Case)[^\n]*\n+(.{20,})?(?=\n(?:CASE|case|Case)|\Z)', re.DOTALL | re.MULTILINE),
         ]
-
         for content in file_contents:
             matched_cases: set[str] = set()
             for pattern in case_patterns:
@@ -191,57 +236,35 @@ class ContentIntegrator:
                     case_content = match.group(1).strip() if match.group(1) else ""
                     if case_content and case_content not in matched_cases:
                         matched_cases.add(case_content)
-                        # 按自然段落分割，最多保留3段
                         paragraphs = re.split(r'(?<=[。！？\n])', case_content)
                         case_text = ''.join(paragraphs[:3])
-                        cases.append({
-                            "content": case_text,
-                            "type": "case"
-                        })
-
-            # 如果没有通过模式匹配到，但文件包含"案例"关键词，
-            # 则尝试提取包含关键词的完整段落（不截断）
+                        cases.append({"content": case_text, "type": "case"})
             if not matched_cases and ('案例' in content or re.search(r'\bcase\b', content, re.I)):
                 sentences = re.split(r'[\n。]+', content)
                 for sentence in sentences:
                     if '案例' in sentence or re.search(r'\bcase\b', sentence, re.I):
                         case_text = sentence.strip()
                         if case_text and len(case_text) > 10:
-                            cases.append({
-                                "content": case_text,
-                                "type": "case"
-                            })
+                            cases.append({"content": case_text, "type": "case"})
                         break
-
         return cases
 
     def _extract_supplementary(self, file_contents: list[str]) -> dict[str, list[str]]:
-        """从文件内容中提取配套材料，包括资源和政策文件"""
         resources: list[str] = []
         policies: list[str] = []
-
-        # 资源模式：匹配文档链接、附件、参考资料等
         resource_patterns = [
-            # URL链接
             re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+'),
-            # 文档引用，如"见附件《xxx》"、"参见《xxx》"
             re.compile(r'《([^》]+)》'),
-            # 资源标记：资源、资料、附件、参考
             re.compile(r'(?:资源|资料|附件|参考|手册|文档)\s*[:：]\s*([^\n]{5,100})'),
         ]
-
-        # 政策模式：匹配规范、制度、流程等政策文件
         policy_patterns = [
-            # 政策文件引用，如"依据《xxx规定》"
             re.compile(r'《([^》]+规定)》'),
             re.compile(r'《([^》]+规范)》'),
             re.compile(r'《([^》]+制度)》'),
             re.compile(r'《([^》]+流程)》'),
             re.compile(r'《([^》]+办法)》'),
-            # 政策标题标记
             re.compile(r'(?:政策|规范|制度|流程|规定)\s*[:：]\s*([^\n]{5,100})'),
         ]
-
         for content in file_contents:
             for pattern in resource_patterns:
                 for match in pattern.finditer(content):
@@ -249,12 +272,10 @@ class ContentIntegrator:
                     extracted = extracted.strip()
                     if extracted and extracted not in resources:
                         resources.append(extracted)
-
             for pattern in policy_patterns:
                 for match in pattern.finditer(content):
                     extracted = match.group(1) if match.lastindex else match.group(0)
                     extracted = extracted.strip()
                     if extracted and extracted not in policies:
                         policies.append(extracted)
-
         return {"resources": resources, "policies": policies}
