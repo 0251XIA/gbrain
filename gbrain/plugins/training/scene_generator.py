@@ -184,30 +184,69 @@ class SceneGenerator:
         """从讲义内容中提取关键段落"""
         sections = []
 
-        # 按 ## 标题分割内容
-        parts = re.split(r'^##\s+', content, flags=re.MULTILINE)
+        # 预处理：清理内容
+        lines = content.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # 跳过空行和引导性内容
+            if any(kw in line for kw in ['通过本培训', '本章将介绍', '让我们从一个问题开始']):
+                continue
+            # 跳过纯分隔线
+            if re.match(r'^\|[\s\-:|]+\|$', line.strip()):
+                continue
+            cleaned_lines.append(line)
 
+        cleaned_content = '\n'.join(cleaned_lines)
+
+        # 按 ### 或 ## 标题分割内容
+        parts = re.split(r'^#{2,3}\s+', cleaned_content, flags=re.MULTILINE)
+
+        # 提取每个部分作为场景
         for i, part in enumerate(parts[1:num_scenes+1]):  # 跳过第一个空部分
-            lines = part.strip().split('\n')
-            title = lines[0] if lines else f"内容{i+1}"
-            content_text = '\n'.join(lines[1:5])  # 取前几行作为内容
+            part_lines = [l for l in part.strip().split('\n') if l.strip()]
+            if not part_lines:
+                continue
+
+            title = part_lines[0] if part_lines else f"内容{i+1}"
+            # 取前几行作为内容
+            content_text = '\n'.join(part_lines[:6])
+            # 清理 markdown 格式
+            content_text = re.sub(r'^[-*]\s+', '', content_text)
+            content_text = re.sub(r'\*\*(.+?)\*\*', r'\1', content_text)
 
             sections.append({
                 'title': title[:50],
-                'content': content_text[:200],
+                'content': content_text[:300],
                 'knowledge_points': [title],
                 'correct_answer': '按照培训要求处理',
-                'explanation': content_text[:100]
+                'explanation': content_text[:150]
             })
 
-        # 如果提取的不够，补充
+        # 如果提取的不够，尝试从内容中提取关键句子作为场景
+        if len(sections) < num_scenes:
+            # 找到所有包含关键动作词的行（如：服务、处理、响应、操作等）
+            key_lines = []
+            for line in cleaned_lines:
+                if any(kw in line for kw in ['服务', '处理', '响应', '操作', '流程', '规范', '要求']):
+                    key_lines.append(line.strip())
+
+            for kw_line in key_lines[:num_scenes - len(sections)]:
+                sections.append({
+                    'title': kw_line[:30],
+                    'content': kw_line,
+                    'knowledge_points': [kw_line[:20]],
+                    'correct_answer': '按照培训要求处理',
+                    'explanation': kw_line
+                })
+
+        # 如果仍然不够，补充
         while len(sections) < num_scenes:
             sections.append({
-                'title': f'场景{len(sections)+1}',
-                'content': '请根据培训内容完成相关任务',
-                'knowledge_points': ['培训内容'],
-                'correct_answer': '按照培训要求处理',
-                'explanation': '请认真学习培训内容'
+                'title': f'场景{len(sections)+1}：综合应用',
+                'content': '根据前面学到的内容，综合处理一个复杂的工作场景',
+                'knowledge_points': ['综合应用'],
+                'correct_answer': '综合运用培训所学知识',
+                'explanation': '结合前面所有场景的内容来处理'
             })
 
         return sections[:num_scenes]
