@@ -169,6 +169,35 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_progress_employee ON learning_progress(employee_id);
             CREATE INDEX IF NOT EXISTS idx_progress_task ON learning_progress(task_id);
             CREATE INDEX IF NOT EXISTS idx_progress_state ON learning_progress(state);
+
+            CREATE TABLE IF NOT EXISTS learning_sessions (
+                id TEXT PRIMARY KEY,
+                employee_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                scene_index INTEGER DEFAULT 0,
+                total_scenes INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                scene_responses TEXT DEFAULT '[]',
+                weak_points TEXT DEFAULT '[]',
+                learning_score REAL DEFAULT 0.0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES training_employees(id),
+                FOREIGN KEY (task_id) REFERENCES training_tasks(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS scene_chains (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                scenes TEXT DEFAULT '[]',
+                weak_points TEXT DEFAULT '[]',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES training_tasks(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sessions_employee ON learning_sessions(employee_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_task ON learning_sessions(task_id);
+            CREATE INDEX IF NOT EXISTS idx_scene_chains_task ON scene_chains(task_id);
         """)
         self.conn.commit()
 
@@ -425,6 +454,115 @@ class Database:
             c.execute("SELECT * FROM quiz_records WHERE progress_id = ? ORDER BY created_at DESC",
                      (progress_id,))
             return [dict(row) for row in c.fetchall()]
+
+    # ========== 场景链相关 ==========
+
+    def insert_scene_chain(self, chain: dict) -> bool:
+        """插入场景链"""
+        try:
+            with self.get_cursor() as c:
+                c.execute(
+                    """INSERT OR REPLACE INTO scene_chains
+                       (id, task_id, scenes, weak_points)
+                       VALUES (?, ?, ?, ?)""",
+                    (chain['id'], chain['task_id'],
+                     json.dumps(chain.get('scenes', []), ensure_ascii=False),
+                     json.dumps(chain.get('weak_points', [])))
+                )
+            return True
+        except Exception as e:
+            logger.error(f"插入场景链失败: {e}")
+            return False
+
+    def get_scene_chain(self, task_id: str) -> Optional[dict]:
+        """获取任务的场景链"""
+        with self.get_cursor() as c:
+            c.execute("SELECT * FROM scene_chains WHERE task_id = ?", (task_id,))
+            row = c.fetchone()
+            if row:
+                result = dict(row)
+                result['scenes'] = json.loads(result.get('scenes', '[]'))
+                result['weak_points'] = json.loads(result.get('weak_points', '[]'))
+                return result
+        return None
+
+    # ========== 学习会话相关 ==========
+
+    def insert_learning_session(self, session: dict) -> bool:
+        """插入学习会话"""
+        try:
+            with self.get_cursor() as c:
+                c.execute(
+                    """INSERT OR REPLACE INTO learning_sessions
+                       (id, employee_id, task_id, scene_index, total_scenes, status,
+                        scene_responses, weak_points, learning_score)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (session['id'], session['employee_id'], session['task_id'],
+                     session.get('scene_index', 0), session.get('total_scenes', 0),
+                     session.get('status', 'active'),
+                     json.dumps(session.get('scene_responses', [])),
+                     json.dumps(session.get('weak_points', [])),
+                     session.get('learning_score', 0.0))
+                )
+            return True
+        except Exception as e:
+            logger.error(f"插入学习会话失败: {e}")
+            return False
+
+    def get_learning_session(self, session_id: str) -> Optional[dict]:
+        """获取学习会话"""
+        with self.get_cursor() as c:
+            c.execute("SELECT * FROM learning_sessions WHERE id = ?", (session_id,))
+            row = c.fetchone()
+            if row:
+                result = dict(row)
+                result['scene_responses'] = json.loads(result.get('scene_responses', '[]'))
+                result['weak_points'] = json.loads(result.get('weak_points', '[]'))
+                return result
+        return None
+
+    def get_learning_session_by_employee_task(self, employee_id: str, task_id: str) -> Optional[dict]:
+        """获取员工对任务的最新学习会话"""
+        with self.get_cursor() as c:
+            c.execute("""SELECT * FROM learning_sessions
+                        WHERE employee_id = ? AND task_id = ? AND status = 'active'
+                        ORDER BY created_at DESC LIMIT 1""",
+                     (employee_id, task_id))
+            row = c.fetchone()
+            if row:
+                result = dict(row)
+                result['scene_responses'] = json.loads(result.get('scene_responses', '[]'))
+                result['weak_points'] = json.loads(result.get('weak_points', '[]'))
+                return result
+        return None
+
+    def update_learning_session(self, session_id: str, updates: dict) -> bool:
+        """更新学习会话"""
+        try:
+            set_clauses = []
+            values = []
+            for key in ['scene_index', 'total_scenes', 'status', 'scene_responses',
+                        'weak_points', 'learning_score']:
+                if key in updates:
+                    if key in ['scene_responses', 'weak_points']:
+                        set_clauses.append(f"{key} = ?")
+                        values.append(json.dumps(updates[key]))
+                    else:
+                        set_clauses.append(f"{key} = ?")
+                        values.append(updates[key])
+            if not set_clauses:
+                return False
+            set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(session_id)
+            with self.get_cursor() as c:
+                c.execute(
+                    f"UPDATE learning_sessions SET {', '.join(set_clauses)} WHERE id = ?",
+                    values
+                )
+            return True
+        except Exception as e:
+            logger.error(f"更新学习会话失败: {e}")
+            return False
 
     def get_dashboard_stats(self) -> dict:
         """获取看板统计数据"""

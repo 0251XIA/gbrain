@@ -863,10 +863,10 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
     @app.post("/api/training/learn/{task_id}/chat")
     async def api_learning_chat(task_id: str, request: Request):
         """
-        SSE 流式对话接口
+        SSE 流式对话接口（场景驱动学习）
 
         action:
-          - start: 初始化学习会话，返回 welcome 消息和进度
+          - start: 初始化学习会话，生成场景链，返回 welcome 消息和进度
           - status: 获取当前进度
           - chat: 处理对话，流式返回
         """
@@ -881,13 +881,28 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             if not task:
                 return JSONResponse({"error": "Task not found"}, status_code=404)
 
-            # 创建或获取会话
-            if task_id not in learning_sessions:
+            # 清理讲义内容
+            clean_content = _clean_lecture_content(task.content or "")
+
+            # 检查是否有已存在的会话
+            if task_id in learning_sessions:
+                agent = learning_sessions[task_id]
+                # 如果是重新开始学习，重置会话
+                if agent.stage in ["completed", "failed"]:
+                    agent.scene_engine.reset()
+                    agent.set_stage("learning")
+            else:
+                # 生成场景链
+                from gbrain.plugins.training.scene_generator import generate_scene_chain
+                scene_chain = generate_scene_chain(clean_content, num_scenes=4, task_id=task_id)
+
+                # 创建学习会话
                 learning_sessions[task_id] = LearningAgent(
                     task_id=task_id,
-                    content=task.content or "",
+                    content=clean_content,
                     task_title=task.title,
-                    progress_id=task_id
+                    progress_id=task_id,
+                    scene_chain=[s.__dict__ for s in scene_chain.scenes] if scene_chain else []
                 )
 
             agent = learning_sessions[task_id]

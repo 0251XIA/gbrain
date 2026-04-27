@@ -24,11 +24,12 @@ class TaskStatus(Enum):
 class LearningState(Enum):
     """学习状态"""
     NOT_STARTED = "not_started"    # 未开始
-    LEARNING = "learning"          # 进行中
-    QUIZ_FAILED = "quiz_failed"    # 测验不及格（可重考）
-    NEEDS_RELEARN = "needs_relearn"  # 需重新学习（重考2次都不通过）
-    COMPLETED = "completed"        # 已完成
-    MASTERED = "mastered"          # 已掌握
+    LEARNING = "learning"          # 进行中（场景学习中）
+    LEARNING_COMPLETED = "learning_completed"  # 学习完成（可参加考核）
+    READY_TO_QUIZ = "ready_to_quiz"  # 准备就绪（学习完成，可参加考核）
+    QUIZ_COMPLETED = "quiz_completed"  # 考核完成
+    COMPLETED = "completed"        # 全部完成（学习+考核都通过）
+    FAILED = "failed"             # 考核未通过（不可重考，需重新学习）
 
 
 class EmployeeRole(Enum):
@@ -122,3 +123,50 @@ class QuizRecord:
     attempts: int = 0  # 第几次考核
     answers: list[dict] = field(default_factory=list)  # 每题答案详情
     created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class Scene:
+    """学习场景"""
+    index: int                    # 场景索引（从1开始）
+    title: str                    # 场景标题，如"场景1：客户基础接待"
+    description: str              # 场景描述（具体工作情境）
+    knowledge_points: list[str]  # 本场景涉及的知识点
+    correct_answer: str           # 标准答案/正确做法
+    explanation: str              # 讲解要点（用户答错时展示）
+    hint: str = ""               # 提示信息
+
+
+@dataclass
+class SceneChain:
+    """场景链（一个任务的所有场景）"""
+    task_id: str
+    scenes: list[Scene]           # 场景列表
+    weak_points: list[str] = field(default_factory=list)  # 全局薄弱知识点
+
+
+@dataclass
+class LearningSession:
+    """一次学习会话"""
+    id: str
+    employee_id: str
+    task_id: str
+    scene_index: int = 0         # 当前场景索引（0表示未开始）
+    total_scenes: int = 0        # 总场景数
+    status: str = "active"       # active | completed | abandoned
+    scene_responses: list[dict] = field(default_factory=list)  # 每个场景的用户回答
+    weak_points: list[str] = field(default_factory=list)  # 本会话中暴露的薄弱点
+    learning_score: float = 0.0  # 学习得分（0-100）
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class SceneResponse:
+    """用户对单个场景的响应"""
+    scene_index: int
+    user_response: str           # 用户回答
+    ai_evaluation: str          # AI评价
+    is_correct: bool            # 是否正确
+    score: float                # 本场景得分
+    knowledge_learned: list[str] = field(default_factory=list)  # 本场景涉及的知识点

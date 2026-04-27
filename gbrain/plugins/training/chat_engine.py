@@ -917,6 +917,293 @@ class QuizEngine(ChatEngine):
         return self._answers
 
 
+# ========== SceneLearningEngine - 场景驱动学习引擎 ==========
+
+class SceneLearningEngine:
+    """
+    场景驱动学习引擎
+
+    学习流程：
+    1. 基于讲义内容生成场景链
+    2. 每个场景让用户先尝试解决
+    3. 用户回答后 AI 评估，给出反馈
+    4. 记录薄弱点，用于后续考核
+    """
+
+    def __init__(self, content: str, scene_chain: list = None):
+        """
+        初始化场景学习引擎
+
+        Args:
+            content: 讲义内容
+            scene_chain: 场景链（如果为 None，会自动生成）
+        """
+        self.content = content
+        self.scene_chain = scene_chain or []
+        self.current_scene_index = 0
+        self.scene_responses = []  # 每个场景的响应记录
+        self.weak_points = []  # 薄弱知识点
+        self.learning_score = 0.0  # 学习得分
+        self.status = "active"  # active | completed
+
+    def set_scene_chain(self, scene_chain: list) -> None:
+        """设置场景链"""
+        self.scene_chain = scene_chain
+        self.current_scene_index = 0
+        self.scene_responses = []
+
+    def get_current_scene(self) -> Optional[dict]:
+        """获取当前场景"""
+        if self.current_scene_index >= len(self.scene_chain):
+            return None
+        return self.scene_chain[self.current_scene_index]
+
+    def get_progress(self) -> dict:
+        """获取学习进度"""
+        total = len(self.scene_chain)
+        current = self.current_scene_index + 1 if self.current_scene_index < total else total
+        percent = int((self.current_scene_index / total) * 100) if total > 0 else 0
+
+        return {
+            'current': current,
+            'total': total,
+            'percent': min(percent, 100),
+            'scene_title': self.get_current_scene().get('title', '') if self.get_current_scene() else ''
+        }
+
+    async def chat(self, user_response: str) -> dict:
+        """
+        处理用户对当前场景的回答
+
+        Args:
+            user_response: 用户回答
+
+        Returns:
+            包含评估结果和下一场景的 dict
+        """
+        current_scene = self.get_current_scene()
+        if not current_scene:
+            return self._build_learning_complete()
+
+        # 评估用户回答
+        evaluation = await self._evaluate_response(user_response, current_scene)
+
+        # 记录响应
+        self.scene_responses.append({
+            'scene_index': self.current_scene_index,
+            'user_response': user_response,
+            'evaluation': evaluation
+        })
+
+        # 更新薄弱点
+        if not evaluation['is_correct']:
+            for kw in current_scene.get('knowledge_points', []):
+                if kw not in self.weak_points:
+                    self.weak_points.append(kw)
+
+        # 更新学习得分（答对得20分，答错但理解到位得10分）
+        if evaluation['is_correct']:
+            self.learning_score += 20
+        elif evaluation['score'] >= 10:
+            self.learning_score += 10
+
+        # 构建响应
+        response = self._build_scene_response(evaluation, current_scene)
+
+        # 推进到下一场景
+        self.current_scene_index += 1
+
+        if self.current_scene_index >= len(self.scene_chain):
+            self.status = "completed"
+            response['is_completed'] = True
+            response['learning_score'] = self.learning_score
+            response['weak_points'] = self.weak_points
+        else:
+            next_scene = self.get_current_scene()
+            response['next_scene'] = {
+                'index': self.current_scene_index + 1,
+                'total': len(self.scene_chain),
+                'title': next_scene.get('title', ''),
+                'description': next_scene.get('description', ''),
+                'hint': next_scene.get('hint', '')
+            }
+
+        return response
+
+    async def _evaluate_response(self, user_response: str, scene: dict) -> dict:
+        """
+        评估用户回答
+
+        Args:
+            user_response: 用户回答
+            scene: 当前场景
+
+        Returns:
+            评估结果 dict
+        """
+        correct_answer = scene.get('correct_answer', '')
+        knowledge_points = scene.get('knowledge_points', [])
+
+        prompt = f"""评估学员对以下培训场景的回答。
+
+场景描述：{scene.get('description', '')}
+正确答案：{correct_answer}
+考察知识点：{', '.join(knowledge_points)}
+
+学员回答：
+{user_response}
+
+请评估学员的回答，给出 JSON 格式：
+{{
+    "is_correct": true或false,
+    "score": 0-20的分数,
+    "feedback": "具体的反馈意见",
+    "missing_knowledge": ["如果回答不正确，列出缺失的知识点"]
+}}
+
+注意：
+- score 根据回答质量给分，不是简单对错
+- 回答正确但不完整给15分左右
+- 回答部分正确给10分左右
+- 回答完全错误但态度认真给5分
+- 敷衍或不相关回答给0-3分"""
+
+        try:
+            response = call_llm(prompt, "")
+            # 提取 JSON
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return {
+                    'is_correct': result.get('is_correct', False),
+                    'score': float(result.get('score', 0)),
+                    'feedback': result.get('feedback', ''),
+                    'missing_knowledge': result.get('missing_knowledge', [])
+                }
+        except Exception as e:
+            print(f"评估回答失败: {e}")
+
+        # 默认评估
+        return {
+            'is_correct': False,
+            'score': 0,
+            'feedback': '无法评估你的回答，请联系管理员。',
+            'missing_knowledge': knowledge_points
+        }
+
+    def _build_scene_response(self, evaluation: dict, scene: dict) -> dict:
+        """构建场景响应"""
+        response = {
+            'scene_index': self.current_scene_index + 1,
+            'total_scenes': len(self.scene_chain),
+            'scene_title': scene.get('title', ''),
+            'evaluation': evaluation,
+            'is_completed': False
+        }
+
+        # 反馈内容
+        if evaluation['is_correct']:
+            response['content'] = f"✅ {evaluation['feedback']}\n\n"
+        else:
+            response['content'] = f"📝 {evaluation['feedback']}\n\n"
+            response['content'] += f"📚 知识点：{', '.join(scene.get('knowledge_points', []))}\n\n"
+            response['content'] += f"💡 参考答案：{scene.get('correct_answer', '')}\n\n"
+            if scene.get('explanation'):
+                response['content'] += f"📖 讲解：{scene.get('explanation', '')}"
+
+        return response
+
+    def _build_learning_complete(self) -> dict:
+        """构建学习完成响应"""
+        return {
+            'content': f"🎉 恭喜完成所有场景学习！\n\n" +
+                      f"学习得分：{self.learning_score} 分\n" +
+                      f"薄弱环节：{', '.join(self.weak_points) if self.weak_points else '无'}\n\n" +
+                      f"准备好参加考核了吗？",
+            'is_completed': True,
+            'learning_score': self.learning_score,
+            'weak_points': self.weak_points,
+            'total_scenes': len(self.scene_chain),
+            'scenes_completed': len(self.scene_responses)
+        }
+
+    def generate_quiz_items(self, num_questions: int = 7) -> list[dict]:
+        """
+        基于场景链和薄弱点生成考核题
+
+        Args:
+            num_questions: 考核题数量
+
+        Returns:
+            考核题列表
+        """
+        if not self.scene_chain:
+            return []
+
+        # 构建场景摘要
+        scenes_summary = "\n".join([
+            f"场景{i+1}：{s.get('title', '')}\n"
+            f"  描述：{s.get('description', '')}\n"
+            f"  正确答案：{s.get('correct_answer', '')}"
+            for i, s in enumerate(self.scene_chain)
+        ])
+
+        weak_points_str = ', '.join(self.weak_points) if self.weak_points else '无'
+
+        prompt = f"""基于以下培训场景，生成考核题目。
+
+场景内容：
+{scenes_summary}
+
+用户薄弱环节：{weak_points_str}
+
+要求：
+1. 生成 {num_questions} 道考核题
+2. 题型包括：场景应用题（考察在实际情境中应用知识）、概念题（考察对知识点的理解）
+3. 场景应用题要基于上述场景改编，考察相同知识点
+4. 每题提供：题目、选项（如有）、正确答案、解析
+
+请用以下JSON格式返回：
+{{
+    "quiz_items": [
+        {{
+            "id": "q1",
+            "question": "题目内容",
+            "question_type": "scenario 或 concept",
+            "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
+            "correct_index": 0,
+            "explanation": "解析",
+            "related_scene": "关联场景"
+        }}
+    ]
+}}
+
+注意：选择题 correct_index 是 0=A, 1=B, 2=C, 3=D"""
+
+        try:
+            response = call_llm(prompt, "")
+            json_match = re.search(r'\{{[\s\S]*\}}', response)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                items = result.get('quiz_items', [])
+                for i, item in enumerate(items):
+                    if not item.get('id'):
+                        item['id'] = f'q{i+1}'
+                return items
+        except Exception as e:
+            print(f"生成考核题失败: {e}")
+
+        return []
+
+    def reset(self) -> None:
+        """重置学习状态"""
+        self.current_scene_index = 0
+        self.scene_responses = []
+        self.weak_points = []
+        self.learning_score = 0.0
+        self.status = "active"
+
+
 # ========== 工厂函数 ==========
 
 def create_chat_engine(content: str, stage: str, quiz_items: list = None) -> ChatEngine:

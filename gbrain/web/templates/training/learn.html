@@ -957,10 +957,26 @@ async function initSession() {
 function getStageName(stage) {
     const names = {
         'tour': '学习阶段',
+        'learning': '场景学习',
+        'ready_to_quiz': '准备考核',
         'quiz': '考核阶段',
-        'completed': '已完成'
+        'quiz_completed': '考核完成',
+        'completed': '全部完成',
+        'failed': '未通过'
     };
     return names[stage] || stage;
+}
+
+// 更新进度显示
+function updateProgressDisplay(progress) {
+    if (progress.scene_progress) {
+        // 场景进度显示
+        const sp = progress.scene_progress;
+        document.getElementById('learning-progress-text').textContent =
+            `场景 ${sp.current}/${sp.total}`;
+        document.getElementById('learning-progress-bar').style.width =
+            `${sp.percent}%`;
+    }
 }
 
 // 加载课件内容
@@ -1347,6 +1363,11 @@ async function sendMessage(message) {
                     timeDiv.textContent = formatTime(new Date());
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                     updateStatus('在线', true);
+
+                    // 更新进度显示
+                    if (parsed.progress) {
+                        updateProgressDisplay(parsed.progress);
+                    }
                     return;
                 }
 
@@ -1362,21 +1383,49 @@ async function sendMessage(message) {
                     if (parsed.metadata.stage === 'quiz') {
                         stageTag.style.background = '#22c55e';
                         stageTag.style.color = 'white';
+                    } else if (parsed.metadata.stage === 'failed') {
+                        stageTag.style.background = '#ef4444';
+                        stageTag.style.color = 'white';
+                    } else if (parsed.metadata.stage === 'completed') {
+                        stageTag.style.background = '#22c55e';
+                        stageTag.style.color = 'white';
                     }
+                }
+
+                // 更新进度显示
+                if (parsed.metadata?.scene_progress) {
+                    const sp = parsed.metadata.scene_progress;
+                    document.getElementById('learning-progress-text').textContent =
+                        `场景 ${sp.current}/${sp.total}`;
+                    document.getElementById('learning-progress-bar').style.width =
+                        `${sp.percent}%`;
                 }
 
                 // 考核完成时显示结果
                 if (parsed.metadata?.quiz_completed) {
                     const passed = parsed.metadata.passed;
-                    const score = parsed.metadata.score;
                     if (passed) {
                         stageTag.textContent = '🎉 已完成';
                         stageTag.style.background = '#22c55e';
                         stageTag.style.color = 'white';
-                    } else if (parsed.metadata.needs_relearn) {
-                        stageTag.textContent = '⚠️ 需重新学习';
+                        // 显示总分
+                        const totalScore = parsed.metadata.total_score;
+                        const learningScore = parsed.metadata.learning_score;
+                        const quizScore = parsed.metadata.quiz_score;
+                        addMessage(
+                            `📊 总成绩：${totalScore.toFixed(0)}分\n` +
+                            `   学习得分：${learningScore.toFixed(0)}分（70%）\n` +
+                            `   考核得分：${quizScore.toFixed(0)}分（30%）`,
+                            'ai'
+                        );
+                    } else {
+                        stageTag.textContent = '⚠️ 未通过';
                         stageTag.style.background = '#ef4444';
                         stageTag.style.color = 'white';
+                        addMessage(
+                            '⚠️ 很遗憾，考核未通过。由于考核只有一次机会，你需要重新学习后再参加考核。',
+                            'ai'
+                        );
                     }
                 }
             }
