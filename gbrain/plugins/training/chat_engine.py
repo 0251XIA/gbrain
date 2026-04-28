@@ -1060,27 +1060,10 @@ class SceneLearningEngine:
         elif evaluation['score'] >= 10:
             self.learning_score += 10
 
-        # 构建响应
+        # 构建响应（不自动推进，等待用户输入"继续"）
         response = self._build_scene_response(evaluation, current_scene)
 
-        # 推进到下一场景
-        self.current_scene_index += 1
-
-        if self.current_scene_index >= len(self.scene_chain):
-            self.status = "completed"
-            response['is_completed'] = True
-            response['learning_score'] = self.learning_score
-            response['weak_points'] = self.weak_points
-        else:
-            next_scene = self.get_current_scene()
-            response['next_scene'] = {
-                'index': self.current_scene_index + 1,
-                'total': len(self.scene_chain),
-                'title': next_scene.get('title', ''),
-                'description': next_scene.get('description', ''),
-                'hint': next_scene.get('hint', '')
-            }
-
+        # 不再自动推进，保持当前场景，等待用户输入"继续"
         return response
 
     async def _evaluate_response(self, user_response: str, scene: dict) -> dict:

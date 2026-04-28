@@ -196,27 +196,54 @@ class SceneGenerator:
 
         cleaned_content = '\n'.join(cleaned_lines)
 
-        # 按 ### 或 ## 标题分割内容
-        parts = re.split(r'^#{2,3}\s+', cleaned_content, flags=re.MULTILINE)
+        # 统计模块数量（## 标题）
+        module_headers = re.findall(r'^##\s+(.+?)$', cleaned_content, re.MULTILINE)
+        num_modules = len(module_headers)
 
-        # 提取每个部分作为场景
-        for i, part in enumerate(parts[1:num_scenes+1]):
+        # 根据模块数量计算场景数：每个模块2-3个场景
+        if num_modules > 0:
+            scenes_per_module = max(2, min(3, num_scenes // num_modules))
+            num_scenes = num_modules * scenes_per_module
+
+        # 按 ## 标题分割内容
+        parts = re.split(r'^##\s+', cleaned_content, flags=re.MULTILINE)
+
+        # 提取每个模块的子段落（### 标题）
+        scene_index = 0
+        for module_idx, part in enumerate(parts[1:]):
             part_lines = [l for l in part.strip().split('\n') if l.strip()]
             if not part_lines:
                 continue
 
-            title = part_lines[0] if part_lines else f"内容{i+1}"
-            body_lines = part_lines[1:7] if len(part_lines) > 1 else part_lines[:1]
-            body_text = '\n'.join(body_lines)
+            module_title = part_lines[0] if part_lines else f"模块{module_idx+1}"
 
-            # 清理 markdown 格式
-            body_text = re.sub(r'^[-*]\s+', '', body_text)
-            body_text = re.sub(r'\*\*(.+?)\*\*', r'\1', body_text)
-            body_text = re.sub(r'\*\s*', '', body_text)
+            # 按 ### 分割模块内容
+            sub_parts = re.split(r'^###\s+', '\n'.join(part_lines), flags=re.MULTILINE)
 
-            # 生成具体场景
-            scene = self._build_scene_from_content(title, body_text, i + 1)
-            sections.append(scene)
+            # 第一个子部分是模块简介，跳过
+            for sub_idx, sub_part in enumerate(sub_parts[1:]):
+                if scene_index >= num_scenes:
+                    break
+
+                sub_lines = [l for l in sub_part.strip().split('\n') if l.strip()]
+                if not sub_lines:
+                    continue
+
+                sub_title = sub_lines[0] if sub_lines else f"内容{scene_index+1}"
+                body_text = '\n'.join(sub_lines[:5])
+
+                # 清理 markdown 格式
+                body_text = re.sub(r'^[-*]\s+', '', body_text)
+                body_text = re.sub(r'\*\*(.+?)\*\*', r'\1', body_text)
+                body_text = re.sub(r'\*\s*', '', body_text)
+
+                # 生成具体场景
+                scene = self._build_scene_from_content(sub_title, body_text, scene_index + 1)
+                sections.append(scene)
+                scene_index += 1
+
+            if scene_index >= num_scenes:
+                break
 
         # 如果提取的不够，尝试从内容中提取关键句子作为场景
         if len(sections) < num_scenes:
