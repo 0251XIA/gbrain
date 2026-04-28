@@ -6,18 +6,16 @@ import os
 from pathlib import Path
 
 # MiniMax API 配置
-MINIMAX_API_KEY = os.environ.get(
-    "MINIMAX_API_KEY",
-    "sk-cp-kDCyY6jjZ6FyV_NvT7VhIHwO-InBEmc7hah1iL4hUl4X9PBhq0A6DPJV61C3F7RlWfpSukXtSYJ39oImP7Mzoe2_ryCmZEcmLJIJMYhszLhpyOfmaVk7Auc"
-)
+MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY")
+if not MINIMAX_API_KEY:
+    raise ValueError("环境变量 MINIMAX_API_KEY 未设置")
 MINIMAX_BASE_URL = "https://api.minimax.chat/v1"
 MODEL_NAME = "MiniMax-M2.7"
 
 # 千问 Embedding API 配置
-QWEN_API_KEY = os.environ.get(
-    "QWEN_API_KEY",
-    "sk-490b0bcca7fb4f3ba4fbfa3f9830b23b"
-)
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY")
+if not QWEN_API_KEY:
+    raise ValueError("环境变量 QWEN_API_KEY 未设置")
 QWEN_EMBEDDING_URL = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding"
 EMBEDDING_MODEL = "text-embedding-v1"
 

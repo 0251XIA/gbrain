@@ -13,6 +13,7 @@ def test_validate_lecture():
         industry="企业服务/SaaS",
         duration="90分钟",
         style="专业严谨",
+        description="",
         objectives=["掌握核心功能", "理解客户痛点"],
         special_requirements=["每章需要包含真实案例"],
         forbidden_content=["竞品负面评价"],

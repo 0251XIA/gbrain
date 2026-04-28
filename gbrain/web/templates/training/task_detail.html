@@ -1,0 +1,211 @@
+{% extends "training/base.html" %}
+
+{% block title %}任务详情{% endblock %}
+
+{% block extra_style %}
+<style>
+.learn-objectives {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+.learn-objectives h3 {
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+}
+.learn-objectives ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+.learn-objectives li {
+    margin-bottom: 0.5rem;
+}
+.course-content {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+.course-content h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
+.course-content h2 { font-size: 1.25rem; color: #444; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #f0f0f0; }
+.course-content h3 { font-size: 1.1rem; color: #555; margin: 1rem 0 0.5rem; }
+.course-content p { line-height: 1.8; color: #555; margin-bottom: 1rem; }
+.course-content ul, .course-content ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+.course-content li { line-height: 1.7; margin-bottom: 0.5rem; color: #555; }
+.course-tip {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 4px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="task-detail">
+    <p style="color: #999;">加载中...</p>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const taskId = "{{ task_id }}";
+
+function extractSummary(markdown) {
+    if (!markdown) return '';
+    const lines = markdown.split('\n');
+    const summaryParts = [];
+    let currentSection = '';
+    let currentContent = [];
+
+    for (const line of lines) {
+        const h2Match = line.match(/^##\s+(.+)/);
+        if (h2Match) {
+            if (currentSection) {
+                const firstPara = currentContent.find(l => l.trim() && !l.startsWith('-') && !l.startsWith('*'));
+                if (firstPara) {
+                    summaryParts.push({ section: currentSection, desc: firstPara.slice(0, 100) + (firstPara.length > 100 ? '...' : '') });
+                }
+            }
+            currentSection = h2Match[1];
+            currentContent = [];
+        } else if (currentSection) {
+            currentContent.push(line);
+        }
+    }
+    if (currentSection) {
+        const firstPara = currentContent.find(l => l.trim() && !l.startsWith('-') && !l.startsWith('*'));
+        if (firstPara) {
+            summaryParts.push({ section: currentSection, desc: firstPara.slice(0, 100) + (firstPara.length > 100 ? '...' : '') });
+        }
+    }
+    return summaryParts;
+}
+
+// 从讲义开篇部分提取学习目标
+function extractObjectives(content) {
+    if (!content) return [];
+    const lines = content.split('\n');
+    let objectives = [];
+    let foundTargetSection = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // 匹配"学习目标"或"目标"章节
+        if (/^#{1,3}\s*(?:学习)?目标/.test(line)) {
+            foundTargetSection = true;
+            // 查找"完成本培训后，您将能够："或类似表述
+            for (let j = i; j < Math.min(i + 10, lines.length); j++) {
+                if (/完成.+后/.test(lines[j])) {
+                    // 从下一行开始收集列表
+                    for (let k = j + 1; k < Math.min(j + 12, lines.length); k++) {
+                        const l = lines[k];
+                        // 遇到新的#标题就停止
+                        if (/^#{1,3}\s+[^【】]/.test(l)) break;
+                        const listMatch = l.match(/^[-*]\s*(.+)/);
+                        if (listMatch) {
+                            objectives.push(listMatch[1].trim());
+                        }
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    return objectives.slice(0, 6);
+}
+
+async function loadTask() {
+    try {
+        const res = await fetch(`/api/training/task/${taskId}`);
+        const data = await res.json();
+        const container = document.getElementById('task-detail');
+
+        if (data.task) {
+            const content = data.task.content || '';
+            const summary = extractSummary(content);
+            const objectives = extractObjectives(content);
+            const description = data.task.description || '';
+
+            // 从任务描述中提取受众
+            let audience = '';
+            const audienceMatch = description.match(/培训受众[：:]\s*(.+?)(?:\n|$)/i);
+            if (audienceMatch) audience = audienceMatch[1].trim();
+
+            // 从任务描述中提取学习时长
+            let duration = '';
+            const durationMatch = description.match(/(?:学习)?时长[：:]\s*(.+?)(?:\n|$)/i);
+            if (durationMatch) duration = durationMatch[1].trim();
+
+            let summaryHtml = summary.length > 0 ? summary.map((s, i) => `
+                <div style="display: flex; align-items: flex-start; margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 8px;">
+                    <span style="background: #4361ee; color: white; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; margin-right: 0.75rem; flex-shrink: 0;">${i + 1}</span>
+                    <div>
+                        <div style="font-weight: bold; color: #333; margin-bottom: 0.25rem;">${s.section}</div>
+                        <div style="color: #666; font-size: 0.875rem;">${s.desc}</div>
+                    </div>
+                </div>
+            `).join('') : '<p style="color: #999;">暂无课程大纲</p>';
+
+            const typeLabel = data.task.task_type === 'onboarding' ? '入职培训' : '技能提升';
+            const deadlineText = data.task.deadline ? `截止日期：${data.task.deadline}` : '未设置截止日期';
+
+            // 学习目标HTML
+            let objectivesHtml = '';
+            if (objectives.length > 0) {
+                objectivesHtml = `
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 1.5rem;">
+                        <h3 style="margin: 0 0 1rem 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>🎯</span>学习目标
+                        </h3>
+                        <ul style="margin: 0; padding-left: 1.5rem; line-height: 1.8;">
+                            ${objectives.map(obj => `<li style="margin-bottom: 0.5rem;">${obj}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = `
+                <div style="max-width: 800px; margin: 0 auto;">
+                    <div class="card" style="margin-bottom: 1rem;">
+                        <h1 style="font-size: 1.5rem; margin-bottom: 0.75rem;">${data.task.title}</h1>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                            <span class="tag">${typeLabel}</span>
+                            ${audience ? `<span style="color: #666; font-size: 0.875rem;">👥 ${audience}</span>` : ''}
+                            ${duration ? `<span style="color: #666; font-size: 0.875rem;">⏱️ ${duration}</span>` : ''}
+                            <span style="color: #999; font-size: 0.875rem;">${deadlineText}</span>
+                        </div>
+                    </div>
+
+                    ${objectivesHtml}
+
+                    <div class="course-content">
+                        <h2 style="margin-bottom: 1rem;">📋 课程大纲</h2>
+                        <div>${summaryHtml}</div>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <a href="/training/task/${taskId}/learn" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">
+                            开始学习 →
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else {
+            container.innerHTML = '<p style="color: #999;">任务不存在</p>';
+        }
+    } catch (e) {
+        document.getElementById('task-detail').innerHTML = '<p style="color: #999;">加载失败</p>';
+    }
+}
+
+loadTask();
+</script>
+{% endblock %}

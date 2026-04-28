@@ -13,6 +13,7 @@ class ParsedPrompt:
     industry: str
     duration: str
     style: StyleType
+    description: str  # 需求描述
     objectives: list[str]
     special_requirements: list[str]
     forbidden_content: list[str]
@@ -36,6 +37,7 @@ class IntegratedContent:
     module_contents: dict
     case_library: list[dict]
     supplementary_materials: dict
+    raw_file_contents: list[str] = field(default_factory=list)  # 原始文件内容，用于补充
 
 
 @dataclass(frozen=True)
@@ -58,3 +60,18 @@ class LectureOutput:
     validation_report: ValidationReport
     knowledge_points: list[KnowledgePoint]
     metadata: dict
+
+
+# 领域同义词映射表
+SYNONYM_MAP: dict[str, list[str]] = {
+    "电话": ["话术", "沟通技巧", "通话", "语音"],
+    "销售": ["营销", "推销", "商务", "售卖"],
+    "客户": ["顾客", "用户", "采购方", "买家"],
+    "合同": ["合约", "协议", "契约"],
+    "签署": ["签名", "签字", "签订", "签章"],
+    "产品": ["商品", "服务", "解决方案"],
+    "培训": ["训练", "学习", "教学"],
+    "系统": ["平台", "软件", "工具"],
+    "流程": ["步骤", "过程", "工序"],
+    "规范": ["标准", "准则", "规程"],
+}

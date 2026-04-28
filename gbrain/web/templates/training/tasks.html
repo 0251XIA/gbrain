@@ -1,0 +1,61 @@
+{% extends "training/base.html" %}
+
+{% block title %}任务列表{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">培训任务列表</h1>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div>
+            <span style="font-weight: bold;">筛选：</span>
+            <select id="filter-type" style="padding: 0.5rem; border-radius: 6px; border: 1px solid #ddd;">
+                <option value="">全部</option>
+                <option value="onboarding">入职培训</option>
+                <option value="skill">技能提升</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="task-list">
+        <p style="color: #999;">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+async function loadTasks() {
+    try {
+        const res = await fetch('/api/training/tasks');
+        const data = await res.json();
+        const list = document.getElementById('task-list');
+        if (data.tasks && data.tasks.length > 0) {
+            list.innerHTML = data.tasks.map(t => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid #eee;">
+                    <div>
+                        <strong style="font-size: 1.1rem;">${t.title}</strong>
+                        <p style="color: #666; font-size: 0.875rem; margin-top: 0.25rem;">${t.description || ''}</p>
+                        <div style="margin-top: 0.5rem;">
+                            <span class="tag">${t.task_type === 'onboarding' ? '入职培训' : '技能提升'}</span>
+                            <span style="margin-left: 0.5rem; color: #999; font-size: 0.875rem;">截止：${t.deadline || '未设置'}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="status-badge ${'status-' + t.status}">${t.status_text || t.status}</span>
+                        <a href="/training/task/${t.id}" class="btn" style="margin-top: 0.5rem; display: block;">查看详情</a>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = '<p style="color: #999; text-align: center; padding: 2rem;">暂无培训任务</p>';
+        }
+    } catch (e) {
+        document.getElementById('task-list').innerHTML = '<p style="color: #999;">加载失败</p>';
+    }
+}
+
+document.getElementById('filter-type').addEventListener('change', loadTasks);
+loadTasks();
+</script>
+{% endblock %}

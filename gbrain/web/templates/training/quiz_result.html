@@ -1,0 +1,57 @@
+{% extends "training/base.html" %}
+
+{% block title %}测验结果{% endblock %}
+
+{% block content %}
+<div class="card" style="text-align: center; padding: 3rem;">
+    <div id="result-icon" style="font-size: 4rem; margin-bottom: 1rem;">⏳</div>
+    <h1 id="result-title" style="font-size: 1.5rem; margin-bottom: 1rem;">正在计算成绩...</h1>
+    <p id="result-message" style="color: #666; margin-bottom: 2rem;"></p>
+    <div id="result-score" style="font-size: 3rem; font-weight: bold; margin-bottom: 2rem;"></div>
+    <div id="result-actions"></div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+const progressId = "{{ progress_id }}";
+
+async function loadResult() {
+    try {
+        const res = await fetch(`/api/training/quiz/result/${progressId}`);
+        const data = await res.json();
+
+        const icon = document.getElementById('result-icon');
+        const title = document.getElementById('result-title');
+        const message = document.getElementById('result-message');
+        const score = document.getElementById('result-score');
+        const actions = document.getElementById('result-actions');
+
+        score.textContent = data.score + '%';
+
+        if (data.passed) {
+            icon.textContent = '🎉';
+            title.textContent = '恭喜通过！';
+            message.textContent = '您已完成本次培训任务';
+            actions.innerHTML = `
+                <a href="/training/tasks" class="btn">返回任务列表</a>
+                <a href="/training/dashboard" class="btn" style="margin-left: 1rem;">查看学习记录</a>
+            `;
+        } else {
+            icon.textContent = '😅';
+            title.textContent = '未通过';
+            message.textContent = `您还有 ${data.attempts_left} 次补考机会，请重新学习后再次测验`;
+            actions.innerHTML = `
+                <a href="/training/learn/${progressId}" class="btn btn-primary">重新学习</a>
+                <a href="/training/tasks" class="btn" style="margin-left: 1rem;">返回任务列表</a>
+            `;
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('result-title').textContent = '加载失败';
+    }
+}
+
+loadResult();
+</script>
+{% endblock %}

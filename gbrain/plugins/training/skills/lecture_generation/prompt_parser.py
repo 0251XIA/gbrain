@@ -1,6 +1,6 @@
 import re
+import warnings
 from dataclasses import dataclass
-from typing import Literal
 from .models import ParsedPrompt, StyleType
 
 
@@ -11,6 +11,9 @@ class PromptParser:
 
         # 提取基本信息
         info = self._extract_info(lines)
+
+        # 提取需求描述
+        description = self._extract_description(lines)
 
         # 提取学习目标
         objectives = self._extract_objectives(lines)
@@ -34,6 +37,7 @@ class PromptParser:
             industry=info.get('industry', ''),
             duration=info.get('duration', ''),
             style=self._parse_style(info.get('style', '专业严谨')),
+            description=description,
             objectives=objectives,
             special_requirements=special_req,
             forbidden_content=forbidden,
@@ -70,6 +74,13 @@ class PromptParser:
     def _extract_objectives(self, lines: list[str]) -> list[str]:
         in_objectives = False
         objectives = []
+        # 支持多种编号格式：1.  1、  一、  （一）
+        patterns = [
+            r'^\d+\.\s+(.+)',      # 1. xxx
+            r'^\d+、\s*(.+)',      # 1、xxx
+            r'^[一二三四五六七八九十]+、\s*(.+)',  # 一、xxx
+            r'^[（\(][一二三四五六七八九十]+[）\)]\s*(.+)',  # （一）xxx
+        ]
         for line in lines:
             if '## 学习目标' in line:
                 in_objectives = True
@@ -77,10 +88,26 @@ class PromptParser:
             if in_objectives:
                 if line.startswith('## '):
                     break
-                match = re.match(r'\d+\.\s*(.+)', line)
-                if match:
-                    objectives.append(match.group(1).strip())
+                for pattern in patterns:
+                    match = re.match(pattern, line.strip())
+                    if match:
+                        objectives.append(match.group(1).strip())
+                        break
         return objectives
+
+    def _extract_description(self, lines: list[str]) -> str:
+        """提取需求描述"""
+        in_desc = False
+        desc_lines = []
+        for line in lines:
+            if '## 需求描述' in line:
+                in_desc = True
+                continue
+            if in_desc:
+                if line.startswith('## '):
+                    break
+                desc_lines.append(line.strip())
+        return '\n'.join(desc_lines).strip()
 
     def _extract_special_requirements(self, lines: list[str]) -> list[str]:
         in_req = False
@@ -121,15 +148,40 @@ class PromptParser:
             if in_outline:
                 if line.startswith('## '):
                     break
-                if '### ' in line:
+                # 检查是否是一级标题（### 而非 ####）
+                if line.startswith('### ') and not line.startswith('#### '):
                     current_section = line.replace('### ', '').strip()
                     outline[current_section] = []
-                elif current_section and line.startswith('#### '):
-                    outline[current_section].append(line.replace('#### ', '').strip())
+                elif current_section:
+                    # 支持多种模块格式：
+                    # 1. #### 模块1：xxx（标准格式）
+                    # 2. 模块1：xxx（直接列出）
+                    # 3. 第1章 xxx（章节格式）
+                    module_line = line
+                    if line.startswith('#### '):
+                        module_line = line.replace('#### ', '').strip()
+                    elif line.startswith('模块') or line.startswith('第') or line.startswith('『'):
+                        module_line = line.strip()
+                    else:
+                        continue  # 跳过不认识的格式
+                    # 清理模块名称（去掉前缀如"模块1："）
+                    module_name = re.sub(r'^(模块|第|『)[^：：]*(：|：|』)\s*', '', module_line).strip()
+                    if module_name:
+                        outline[current_section].append(module_name)
         return outline
 
     def _count_modules(self, lines: list[str]) -> int:
-        return sum(1 for line in lines if re.match(r'#### 模块\d+', line))
+        # 支持多种模块标记格式：#### 模块、#### 第X章、#### X. xxx、模块X：xxx
+        count = 0
+        for line in lines:
+            content = line.strip()
+            # 匹配 #### 模块、#### 第X章、#### X. xxx 等
+            if re.match(r'^####\s+', line):
+                content = re.sub(r'^####\s+', '', line).strip()
+            # 检查是否包含模块/章/节等关键词，或者是模块X：格式
+            if any(kw in content for kw in ['模块', '章', '节']) or re.match(r'^(模块|第)[0-9一二三四五六七八九十]+[：:、]', content):
+                count += 1
+        return count
 
     def _parse_style(self, style: str) -> StyleType:
         style_map = {
@@ -137,4 +189,8 @@ class PromptParser:
             '专业严谨': '专业严谨',
             '口语化': '口语化'
         }
-        return style_map.get(style, '专业严谨')
+        result = style_map.get(style, None)
+        if result is None:
+            warnings.warn(f"未知风格值 '{style}'，已默认设置为'专业严谨'")
+            result = '专业严谨'
+        return result

@@ -46,22 +46,516 @@
     background: white;
     border: 1px solid #e0e0e0;
     border-radius: 12px;
-    padding: 1.5rem;
+    padding: 2rem 2.5rem;
     max-height: calc(100vh - 8rem);
     overflow-y: auto;
 }
-.course-body h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
-.course-body h2 { font-size: 1.25rem; color: #444; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #f0f0f0; }
-.course-body h3 { font-size: 1.1rem; color: #555; margin: 1rem 0 0.5rem; }
-.course-body p { line-height: 1.8; color: #555; margin-bottom: 1rem; }
-.course-body ul, .course-body ol { padding-left: 1.5rem; margin-bottom: 1rem; }
-.course-body li { line-height: 1.7; margin-bottom: 0.5rem; color: #555; }
+.course-body h1 {
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+    color: #1a1a2e;
+    border-bottom: 2px solid #4361ee;
+    padding-bottom: 0.75rem;
+}
+.course-body h2 {
+    font-size: 1.35rem;
+    color: #1a1a2e;
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e8e8e8;
+}
+.course-body h3 {
+    font-size: 1.1rem;
+    color: #333;
+    margin: 1.5rem 0 0.75rem;
+    font-weight: 600;
+}
+.course-body p {
+    line-height: 1.9;
+    color: #444;
+    margin-bottom: 1rem;
+}
+.course-body ul, .course-body ol {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+.course-body li {
+    line-height: 1.8;
+    margin-bottom: 0.5rem;
+    color: #444;
+}
+.course-body strong {
+    color: #1a1a2e;
+    font-weight: 600;
+}
+.course-body blockquote {
+    background: #f8f9fa;
+    border-left: 4px solid #4361ee;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+    font-style: italic;
+    color: #555;
+}
+.course-body table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border: 1px solid #cbd5e1;
+}
+
+/* 课程大纲样式 */
+.course-outline {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+}
+.course-outline h3 {
+    font-size: 1.1rem;
+    color: #1e293b;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #4361ee;
+}
+.outline-list {
+    margin: 0;
+    padding-left: 1.5rem;
+}
+.outline-module {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+.outline-subsections {
+    margin: 0.5rem 0 0.5rem 1.5rem;
+    padding-left: 0;
+    list-style-type: none;
+}
+.outline-subsection {
+    font-weight: normal;
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    padding-left: 1rem;
+    border-left: 2px solid #cbd5e1;
+}
+.course-divider {
+    height: 2px;
+    background: linear-gradient(90deg, #4361ee 0%, #764ba2 100%);
+    margin: 1.5rem 0;
+    border-radius: 2px;
+}
+.course-body thead {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+.course-body th {
+    padding: 1rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.course-body tbody tr {
+    transition: all 0.2s ease;
+}
+.course-body tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+.course-body tbody tr:nth-child(odd) {
+    background: #fff;
+}
+.course-body tbody tr:hover {
+    background: #e0f2fe;
+    transform: scale(1.005);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+.course-body td {
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+    vertical-align: middle;
+}
+.course-body tbody tr:last-child td {
+    border-bottom: none;
+}
+.course-body tbody tr td:first-child {
+    font-weight: 600;
+    color: #1e40af;
+}
+.course-body hr {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 2rem 0;
+}
+.course-body em {
+    font-style: italic;
+    color: #555;
+}
+.course-body code {
+    background: #f4f4f4;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+    font-family: monospace;
+}
 .course-tip {
     background: #fff3cd;
     border-left: 4px solid #ffc107;
     padding: 1rem;
     margin: 1rem 0;
     border-radius: 4px;
+}
+/* 学习内容结构化排版 */
+.learn-section {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #eee;
+}
+.learn-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+.learn-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.learn-section-title .icon {
+    font-size: 1.2rem;
+}
+.learn-section-content {
+    color: #444;
+    line-height: 1.9;
+    font-size: 0.95rem;
+}
+.learn-section-content p {
+    margin: 0 0 0.75rem 0;
+}
+.learn-section-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* AI 消息中的学习内容样式 */
+.message-content .learn-point {
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin: 0.5rem 0;
+    border: 1px solid #e8e8e8;
+}
+.message-content .learn-point-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #4361ee;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.message-content .learn-item {
+    margin: 1rem 0;
+    padding-left: 1rem;
+}
+.message-content .learn-item-label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+}
+.message-content .learn-item-label.what { color: #4361ee; }
+.message-content .learn-item-label.why { color: #f59e0b; }
+.message-content .learn-item-label.how { color: #22c55e; }
+.message-content .learn-item-content {
+    color: #555;
+    line-height: 1.8;
+}
+.message-content .learn-hint {
+    background: #fff3cd;
+    border-left: 3px solid #ffc107;
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+/* 普通文本展示样式 */
+.section-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin: 1.5rem 0 0.75rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #4361ee;
+}
+.section-title:first-child {
+    margin-top: 0;
+}
+.sub-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+    margin: 1rem 0 0.5rem 0;
+}
+.list-item {
+    padding: 0.25rem 0 0.25rem 1rem;
+    margin: 0.25rem 0;
+    color: #444;
+    line-height: 1.6;
+}
+.list-item.numbered {
+    padding-left: 1.5rem;
+}
+
+/* 课件内容区 - 普通文本模式 */
+/* ========================================
+   课件内容区 - 专业编辑排版
+   ======================================== */
+.course-body.plain-text {
+    padding: 2rem 2.5rem;
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: #374151;
+}
+
+/* 顶级标题 - 开篇 */
+.course-body.plain-text .lecture-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 3px solid #6366f1;
+    letter-spacing: -0.02em;
+}
+
+/* 分隔线 --- 作为章节过渡 */
+.course-body.plain-text hr.section-divider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, #e5e7eb, transparent);
+    margin: 2.5rem 0;
+}
+
+/* 一级标题 ## */
+.course-body.plain-text .section-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 2rem 0 1rem 0;
+    padding: 0.5rem 0 0.5rem 1rem;
+    border-left: 4px solid #6366f1;
+    background: linear-gradient(90deg, #f1f5f9, transparent);
+    border-radius: 0 4px 4px 0;
+    letter-spacing: 0.01em;
+}
+.course-body.plain-text .section-title:first-child {
+    margin-top: 0;
+}
+
+/* 二级标题 ### */
+.course-body.plain-text .sub-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #334155;
+    margin: 1.5rem 0 0.75rem 0;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* 三级标题 #### */
+.course-body.plain-text .h3-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #475569;
+    margin: 1rem 0 0.5rem 0;
+}
+
+/* 段落 */
+.course-body.plain-text p {
+    margin: 0 0 1rem 0;
+    color: #374151;
+    text-align: justify;
+}
+
+/* 粗体 **text** */
+.course-body.plain-text strong {
+    color: #1e293b;
+    font-weight: 600;
+    background: linear-gradient(180deg, transparent 60%, #fef08a 60%);
+    padding: 0 2px;
+}
+
+/* 列表项 */
+.course-body.plain-text .list-item {
+    margin: 0.4rem 0;
+    padding: 0.3rem 0 0.3rem 1.5rem;
+    position: relative;
+    color: #374151;
+}
+.course-body.plain-text .list-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.65em;
+    width: 6px;
+    height: 6px;
+    background: #6366f1;
+    border-radius: 50%;
+}
+.course-body.plain-text .list-item.numbered {
+    padding-left: 1.75rem;
+}
+.course-body.plain-text .list-item.numbered::before {
+    display: none;
+}
+
+/* 引用块 > */
+.course-body.plain-text blockquote {
+    margin: 1.25rem 0;
+    padding: 1rem 1.25rem;
+    background: #f8fafc;
+    border-left: 4px solid #6366f1;
+    border-radius: 0 8px 8px 0;
+    color: #475569;
+    font-style: normal;
+}
+.course-body.plain-text blockquote strong {
+    color: #6366f1;
+    background: none;
+}
+
+/* 表格 */
+.course-body.plain-text table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid #e5e7eb;
+}
+.course-body.plain-text th {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    padding: 0.85rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    color: #ffffff;
+    border-bottom: none;
+    letter-spacing: 0.02em;
+}
+.course-body.plain-text td {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+    vertical-align: middle;
+}
+.course-body.plain-text tr:last-child td {
+    border-bottom: none;
+}
+.course-body.plain-text tr:hover td {
+    background: #f8fafc;
+}
+.course-body.plain-text tr:nth-child(even) td {
+    background: #fafbfc;
+}
+.course-body.plain-text tr:nth-child(even):hover td {
+    background: #f0f7ff;
+}
+.course-body.plain-text td strong {
+    color: #1e40af;
+    background: none;
+    padding: 0;
+}
+
+/* 高亮提示块 */
+.course-body.plain-text .highlight-box {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border-left: 4px solid #f59e0b;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+    color: #78350f;
+}
+.course-body.plain-text .highlight-box strong {
+    background: none;
+    color: #92400e;
+}
+
+/* 标签 */
+.course-body.plain-text .tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+}
+
+.markdown-body > *:first-child {
+    margin-top: 0;
+}
+
+/* 考核模式样式 */
+.quiz-result {
+    text-align: center;
+    padding: 2rem;
+}
+.quiz-score {
+    font-size: 3rem;
+    font-weight: bold;
+    margin: 1rem 0;
+}
+.quiz-score.passed {
+    color: #22c55e;
+}
+.quiz-score.failed {
+    color: #ef4444;
+}
+.quiz-message {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+/* 考核选项按钮 */
+.quiz-option-btn {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: white;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+.quiz-option-btn:hover {
+    border-color: #4361ee;
+    background: #f1f3f5;
+}
+.quiz-option-btn.selected {
+    border-color: #4361ee;
+    background: #e8f4fd;
 }
 
 /* AI 对话面板 */
@@ -357,8 +851,11 @@ function addMessage(content, type, showTime = true) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message message-${type}`;
 
+    // 检测是否是学习内容（包含知识点结构）
+    let formattedContent = formatLearningContent(content);
+
     // 解析 markdown
-    const parsed = marked.parse(content);
+    const parsed = marked.parse(formattedContent);
     const timeStr = showTime ? `<div class="message-time">${formatTime(new Date())}</div>` : '';
 
     if (type === 'ai') {
@@ -369,6 +866,40 @@ function addMessage(content, type, showTime = true) {
 
     chatMessages.appendChild(msgDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// 格式化学习内容，展示结构化知识点
+function formatLearningContent(content) {
+    if (!content) return '';
+
+    // 检测知识点格式：📖 【标题】 + **是什么/为什么/怎么样**
+    const pointPattern = /📖\s*【([^】]+)】[\s\n]*(?:\*\*是什么：\*\*([\s\S]*?)(?=\*\*为什么：\*\*|$))?(?:)?/;
+    if (pointPattern.test(content)) {
+        // 转换为结构化 HTML
+        return content
+            // 知识点标题和内容
+            .replace(/📖\s*【([^】]+)】/g, '<div class="learn-point"><div class="learn-point-title">📖 $1</div>')
+            // 替换各部分
+            .replace(/\*\*是什么：\*\*/g, '<div class="learn-item"><div class="learn-item-label what">📚 是什么</div><div class="learn-item-content">')
+            .replace(/\*\*为什么：\*\*/g, '</div><div class="learn-item"><div class="learn-item-label why">❓ 为什么</div><div class="learn-item-content">')
+            .replace(/\*\*怎么样：\*\*/g, '</div><div class="learn-item"><div class="learn-item-label how">⚡ 怎么样</div><div class="learn-item-content">')
+            .replace(/\*\*为什么\*\*：/g, '<div class="learn-item"><div class="learn-item-label why">❓ 为什么</div><div class="learn-item-content">')
+            .replace(/\*\*怎么样\*\*：/g, '<div class="learn-item"><div class="learn-item-label how">⚡ 怎么样</div><div class="learn-item-content">')
+            .replace(/\*\*是什么\*\*：/g, '<div class="learn-item"><div class="learn-item-label what">📚 是什么</div><div class="learn-item-content">')
+            // 结尾
+            .replace(/(\n*<!--.*-->)?$/g, '</div></div></div>$1');
+    }
+
+    // 检测是否只有单一内容块
+    if (content.includes('**是什么：**') || content.includes('**为什么：**') || content.includes('**怎么样：**')) {
+        return content
+            .replace(/\*\*是什么：\*\*/g, '<div class="learn-item"><div class="learn-item-label what">📚 是什么</div><div class="learn-item-content">')
+            .replace(/\*\*为什么：\*\*/g, '</div><div class="learn-item"><div class="learn-item-label why">❓ 为什么</div><div class="learn-item-content">')
+            .replace(/\*\*怎么样：\*\*/g, '</div><div class="learn-item"><div class="learn-item-label how">⚡ 怎么样</div><div class="learn-item-content">')
+            .replace(/\n\n/g, '</div><div class="learn-item-content">');
+    }
+
+    return content;
 }
 
 // 添加加载指示器
@@ -403,7 +934,12 @@ function parseSSELine(line) {
     const data = line.slice(6).trim();
     if (data === '[DONE]') return { done: true };
     try {
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // 如果是字符串（欢迎消息），包装成对象
+        if (typeof parsed === 'string') {
+            return { content: parsed };
+        }
+        return parsed;
     } catch (e) {
         return { content: data };
     }
@@ -415,26 +951,92 @@ async function initSession() {
         const res = await fetch(`/api/training/learn/${progressId}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'start' })
+            body: JSON.stringify({ action: 'start', progress_id: progressId })
         });
-        const data = await res.json();
-        sessionId = data.session_id;
+
+        // 解析 SSE 流
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let welcomeReceived = false;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const parsed = parseSSELine(line);
+                if (parsed && parsed.content) {
+                    addMessage(parsed.content, 'ai');
+                    welcomeReceived = true;
+                }
+                if (parsed && parsed.type === 'progress') {
+                    // 更新进度
+                    if (parsed.stage) {
+                        stageTag.textContent = getStageName(parsed.stage);
+                    }
+                }
+            }
+        }
 
         // 加载课件内容
         await loadCourseContent();
 
-        // 发送欢迎消息
-        if (data.welcome_message) {
-            addMessage(data.welcome_message, 'ai');
-        }
     } catch (e) {
         console.error('初始化失败:', e);
         addMessage('抱歉，连接失败了。请刷新页面重试。', 'ai');
     }
 }
 
-// 加载课件内容
+function getStageName(stage) {
+    const names = {
+        'tour': '学习阶段',
+        'learning': '场景学习',
+        'ready_to_quiz': '准备考核',
+        'quiz': '考核阶段',
+        'quiz_completed': '考核完成',
+        'completed': '全部完成',
+        'failed': '未通过'
+    };
+    return names[stage] || stage;
+}
+
+// 更新进度显示
+function updateProgressDisplay(progress) {
+    if (progress.scene_progress) {
+        // 场景进度显示
+        const sp = progress.scene_progress;
+        document.getElementById('learning-progress-text').textContent =
+            `场景 ${sp.current}/${sp.total}`;
+        document.getElementById('learning-progress-bar').style.width =
+            `${sp.percent}%`;
+    }
+}
+
+// 加载课件内容（带缓存）
 async function loadCourseContent() {
+    const cacheKey = `course_content_${progressId}`;
+    const cached = localStorage.getItem(cacheKey);
+
+    if (cached) {
+        try {
+            const data = JSON.parse(cached);
+            document.getElementById('task-title').textContent = data.task_title || '培训任务';
+            if (data.content) {
+                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+            } else {
+                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+            }
+            return;
+        } catch (e) {
+            localStorage.removeItem(cacheKey);
+        }
+    }
+
     try {
         const res = await fetch(`/api/training/learn-by-task/${progressId}`);
         const data = await res.json();
@@ -447,9 +1049,12 @@ async function loadCourseContent() {
 
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
-        if (data.content) {
-            const rendered = marked.parse(data.content);
-            courseContent.innerHTML = `<div class="markdown-body">${rendered}</div>`;
+        // 直接显示讲义内容
+if (data.content) {
+            const formatted = formatPlainTextContent(data.content);
+            courseContent.innerHTML = `<div class="plain-text">${formatted}</div>`;
+            // 缓存到 localStorage
+            localStorage.setItem(cacheKey, JSON.stringify(data));
         } else {
             courseContent.innerHTML = '<p style="color: #999;">暂无课件内容</p>';
         }
@@ -459,12 +1064,352 @@ async function loadCourseContent() {
     }
 }
 
+// 渲染课程大纲
+function renderCourseOutline(outline, content) {
+    if (!outline || outline.length === 0) {
+        // 没有大纲时，直接渲染内容
+        return content ? `<div class="plain-text">${formatPlainTextContent(content)}</div>` : '';
+    }
+
+    let html = '<div class="course-outline">';
+    html += '<h3>课程大纲</h3>';
+    html += '<ol class="outline-list">';
+
+    outline.forEach((module, idx) => {
+        html += `<li class="outline-module">${module.title}`;
+        if (module.subsections && module.subsections.length > 0) {
+            html += '<ul class="outline-subsections">';
+            module.subsections.forEach(sub => {
+                html += `<li class="outline-subsection">${sub}</li>`;
+            });
+            html += '</ul>';
+        }
+        html += '</li>';
+    });
+
+    html += '</ol></div>';
+    html += '<div class="course-divider"></div>';
+
+    // 添加完整的讲义内容
+    if (content) {
+        html += `<div class="plain-text">${formatPlainTextContent(content)}</div>`;
+    }
+
+    return html;
+}
+
+// 提取纯讲义内容（移除元数据行、思考过程、引导性内容）
+function extractLectureContent(content) {
+    if (!content) return '';
+    const lines = content.split('\n');
+    const result = [];
+    const excludePatterns = [
+        /^## 基本信息/,
+        /^## 开篇/,
+        /^## 学习目标/,
+        /^## 培训目标/,
+        /^## 培训目的/,
+        /^## 准备工作/,
+        /^## 培训场景/,
+        /^### 培训场景/,
+        /^### 培训目标/,
+        /^### 培训目的/,
+        /^### 需求/,
+        /^### 思考/,
+        /^### 分析/,
+        /^### 案例/,
+        /^### 学习目标/,
+        /^### 准备工作/,
+        /通过本培训，您将掌握/,
+        /本章将介绍.*相关知识和技能/,
+        /本节将介绍/,
+        /^## 模块总结/,
+        /^## 本章小结/,
+        /^## 行动计划/,
+    ];
+    const excludeKeywords = [
+        '研究表明',
+        '让我们从一个问题开始',
+        '某科技公司在',
+        '问题分析',
+        '启示',
+        '从本质上说',
+        '这是一个',
+        '让我们思考',
+        '思考一下',
+        '分析',
+        '需求',
+        '思考过程',
+        '生成内容',
+        '以下是',
+        '通过分析',
+        '通过本培训',
+        '让我们分析',
+        '培训场景',
+        '培训目标',
+        '培训目的',
+        '学习目标',
+        '准备工作',
+        '这就是商务礼仪的力量',
+        '它不是刻板的条条框框',
+        '而是在每一个细节中传递价值',
+        '本次培训时长约',
+        '将帮助大家',
+        '理解**',
+        '掌握**',
+        '学会**',
+        '运用**',
+        '提升**',
+    ];
+    let skipUntilHeading = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        // 如果遇到新的 ## 标题，重置跳过状态
+        if (/^## [^#]/.test(trimmedLine)) {
+            skipUntilHeading = false;
+        }
+
+        // 检查排除模式
+        if (excludePatterns.some(p => p.test(trimmedLine))) continue;
+
+        // 检查排除关键词
+        if (excludeKeywords.some(kw => trimmedLine.includes(kw))) continue;
+
+        // 跳过开场的引导性问题
+        if (trimmedLine.includes('让我们从一个问题开始')) {
+            skipUntilHeading = true;
+            continue;
+        }
+        if (skipUntilHeading && !/^## /.test(trimmedLine)) {
+            continue;
+        }
+
+        // 跳过纯思考/分析的行（不以实际内容结尾）
+        if (/^(让我们|思考|分析|需求)[：:]/.test(trimmedLine)) {
+            continue;
+        }
+
+        result.push(line);
+    }
+
+    return result.join('\n').trim();
+}
+
+// 格式化纯文本内容（普通文本展示）
+function formatPlainTextContent(content) {
+    if (!content) return '';
+
+    // 预处理：统一换行
+    content = content.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+
+    // 预处理：检测并组装表格
+    content = processTables(content);
+
+    let result = '';
+    const lines = content.split('\n');
+    let foundLectureTitle = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+
+        // 分隔线 ---
+        if (/^---+$/.test(line.trim())) {
+            result += '<hr class="section-divider">';
+            continue;
+        }
+
+        // 标题处理顺序：# 开篇 > ## 标题 > ### 标题 > #### 标题
+        // 单个 # 标题（开篇、模块名）
+        if (/^#\s+(.+)$/.test(line)) {
+            const title = line.replace(/^#\s+/, '');
+            // 第一个标题作为 lecture-title
+            if (!foundLectureTitle) {
+                result += `<div class="lecture-title">${title}</div>`;
+                foundLectureTitle = true;
+            } else {
+                result += `<div class="section-title">${title}</div>`;
+            }
+            continue;
+        }
+
+        // 一级标题 ## 开篇 / ## 模块N
+        if (/^##\s+(.+)$/.test(line)) {
+            const title = line.replace(/^##\s+/, '');
+            if (!foundLectureTitle) {
+                result += `<div class="lecture-title">${title}</div>`;
+                foundLectureTitle = true;
+            } else {
+                result += `<div class="section-title">${title}</div>`;
+            }
+            continue;
+        }
+
+        // 二级标题 ###
+        if (/^###\s+(.+)$/.test(line)) {
+            const title = line.replace(/^###\s+/, '');
+            if (/^[一二三四五六七八九十\d]+[．.、:]/.test(title)) {
+                result += `<div class="sub-title emphasis">${title}</div>`;
+            } else {
+                result += `<div class="sub-title">${title}</div>`;
+            }
+            continue;
+        }
+
+        // 三级标题 ####
+        if (/^####\s+(.+)$/.test(line)) {
+            result += `<div class="h3-title">${line.replace(/^####\s+/, '')}</div>`;
+            continue;
+        }
+
+        // 无序列表 -
+        if (/^-\s+(.+)$/.test(line)) {
+            const match = line.match(/^-\s+\*\*(.+?)\*\*[：:](.*)$/);
+            if (match) {
+                result += `<div class="list-item emphasis"><strong>${match[1]}</strong>：${match[2]}</div>`;
+            } else {
+                result += `<div class="list-item">${processInlineFormat(line.replace(/^-\s+/, ''))}</div>`;
+            }
+            continue;
+        }
+
+        // 有序列表 1. 2.
+        if (/^\d+\.\s+(.+)$/.test(line)) {
+            result += `<div class="list-item numbered">${processInlineFormat(line.replace(/^\d+\.\s+/, ''))}</div>`;
+            continue;
+        }
+
+        // 引用块 >
+        if (/^>\s*(.+)$/.test(line)) {
+            result += `<blockquote>${processInlineFormat(line.replace(/^>\s*/, ''))}</blockquote>`;
+            continue;
+        }
+
+        // 高亮提示 [提示] 或 [注意]
+        if (/^\[提示\]|^\[注意\]/.test(line)) {
+            result += `<div class="highlight-box">${processInlineFormat(line.replace(/^\[提示\]|^\[注意\]/, ''))}</div>`;
+            continue;
+        }
+
+        // 空行
+        if (line.trim() === '') {
+            continue;
+        }
+
+        // HTML 标签行（来自 processTables 的表格），直接保留不转义
+        if (line.includes('</table>') || line.includes('<table') || line.includes('<tr') || line.includes('</tr') || line.includes('<th') || line.includes('</th') || line.includes('<td') || line.includes('</td') || line.includes('<thead') || line.includes('</thead') || line.includes('<tbody') || line.includes('</tbody')) {
+            result += line;
+            continue;
+        }
+
+        // 普通段落
+        result += `<p>${processInlineFormat(line)}</p>`;
+    }
+
+    // 后处理
+    result = result.replace(/<p><\/p>/g, '');
+    result = result.replace(/<\/p>\s*<p>/g, '</p>\n<p>');
+
+    return result;
+
+    // 处理 Markdown 表格
+    function processTables(content) {
+        const lines = content.split('\n');
+        const result = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+
+            // 检测是否是表格行（以 | 开头和结尾）
+            if (/^\|.*\|$/.test(line.trim())) {
+                const tableLines = [];
+                // 收集连续的表格行
+                while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+                    // 跳过分隔行（如 |---|---|）
+                    if (!/^\|[\s\-:|]+\|$/.test(lines[i].trim())) {
+                        tableLines.push(lines[i]);
+                    }
+                    i++;
+                }
+
+                if (tableLines.length >= 2) {
+                    result.push(buildTable(tableLines));
+                } else {
+                    // 不足2行，当作普通段落
+                    tableLines.forEach(l => result.push(`<p>${processInlineFormat(l)}</p>`));
+                }
+            } else {
+                result.push(line);
+                i++;
+            }
+        }
+
+        return result.join('\n');
+    }
+
+    // 构建 HTML 表格
+    function buildTable(rows) {
+        if (rows.length < 2) return rows.map(r => `<p>${escapeHtml(r)}</p>`).join('');
+
+        let html = '<table>';
+
+        rows.forEach((row, idx) => {
+            // 解析单元格
+            const cells = row.split('|').filter((c, i, arr) => i > 0 && i < arr.length - 1).map(c => c.trim());
+
+            if (idx === 0) {
+                // 表头
+                html += '<thead><tr>';
+                cells.forEach(cell => {
+                    html += `<th>${escapeHtml(cell)}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+            } else {
+                html += '<tr>';
+                cells.forEach(cell => {
+                    html += `<td>${escapeHtml(cell)}</td>`;
+                });
+                html += '</tr>';
+            }
+        });
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    // 转义普通文本（用于普通段落和表格单元格，不用于已有HTML标签的内容）
+    function escapeHtml(text) {
+        text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        return text;
+    }
+
+    // 处理内联格式（粗体、斜体），用于普通段落
+    function processInlineFormat(text) {
+        text = escapeHtml(text);
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        return text;
+    }
+}
+
 // 发送消息
 async function sendMessage(message) {
-    if (!message.trim() || !sessionId) return;
+    if (!message.trim()) return;
 
-    // 显示用户消息
-    addMessage(message, 'user');
+    // 检查是否是开始学习触发词
+    const startTriggers = ['开始', '开始学习', '学习', 'start'];
+    const isStartTrigger = startTriggers.includes(message.trim());
+
+    // 如果不是触发词，显示用户消息
+    if (!isStartTrigger) {
+        addMessage(message, 'user');
+    }
+
     chatInput.value = '';
     chatSendBtn.disabled = true;
 
@@ -510,6 +1455,11 @@ async function sendMessage(message) {
                     timeDiv.textContent = formatTime(new Date());
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                     updateStatus('在线', true);
+
+                    // 更新进度显示
+                    if (parsed.progress) {
+                        updateProgressDisplay(parsed.progress);
+                    }
                     return;
                 }
 
@@ -519,8 +1469,56 @@ async function sendMessage(message) {
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 
-                if (parsed.stage) {
-                    stageTag.textContent = parsed.stage;
+                if (parsed.metadata?.stage) {
+                    stageTag.textContent = getStageName(parsed.metadata.stage);
+                    // 考核开始时高亮显示
+                    if (parsed.metadata.stage === 'quiz') {
+                        stageTag.style.background = '#22c55e';
+                        stageTag.style.color = 'white';
+                    } else if (parsed.metadata.stage === 'failed') {
+                        stageTag.style.background = '#ef4444';
+                        stageTag.style.color = 'white';
+                    } else if (parsed.metadata.stage === 'completed') {
+                        stageTag.style.background = '#22c55e';
+                        stageTag.style.color = 'white';
+                    }
+                }
+
+                // 更新进度显示
+                if (parsed.metadata?.scene_progress) {
+                    const sp = parsed.metadata.scene_progress;
+                    document.getElementById('learning-progress-text').textContent =
+                        `场景 ${sp.current}/${sp.total}`;
+                    document.getElementById('learning-progress-bar').style.width =
+                        `${sp.percent}%`;
+                }
+
+                // 考核完成时显示结果
+                if (parsed.metadata?.quiz_completed) {
+                    const passed = parsed.metadata.passed;
+                    if (passed) {
+                        stageTag.textContent = '🎉 已完成';
+                        stageTag.style.background = '#22c55e';
+                        stageTag.style.color = 'white';
+                        // 显示总分
+                        const totalScore = parsed.metadata.total_score;
+                        const learningScore = parsed.metadata.learning_score;
+                        const quizScore = parsed.metadata.quiz_score;
+                        addMessage(
+                            `📊 总成绩：${totalScore.toFixed(0)}分\n` +
+                            `   学习得分：${learningScore.toFixed(0)}分（70%）\n` +
+                            `   考核得分：${quizScore.toFixed(0)}分（30%）`,
+                            'ai'
+                        );
+                    } else {
+                        stageTag.textContent = '⚠️ 未通过';
+                        stageTag.style.background = '#ef4444';
+                        stageTag.style.color = 'white';
+                        addMessage(
+                            '⚠️ 很遗憾，考核未通过。由于考核只有一次机会，你需要重新学习后再参加考核。',
+                            'ai'
+                        );
+                    }
                 }
             }
         }

@@ -16,7 +16,8 @@ class LectureGenerationBuilder:
         self,
         user_prompt: str,
         file_contents: list[str],
-        training_type: str
+        training_type: str,
+        output_format: str = "lecture"
     ) -> dict:
         """完整构建流程"""
         # Step 1: 解析 user_prompt
@@ -26,10 +27,10 @@ class LectureGenerationBuilder:
         integrated = self.integrator.integrate(parsed, file_contents)
 
         # Step 3: AI 生成讲义（传入 training_type 用于选择内容模板）
-        content = self.generator.generate(parsed, integrated, training_type)
+        content = self.generator.generate(parsed, integrated, training_type, output_format)
 
         # Step 4: 校验
-        validation_report = self.validator.validate(content, parsed)
+        validation_report = self.validator.validate(content, parsed, training_type)
 
         # 构建输出
         return {
@@ -40,6 +41,7 @@ class LectureGenerationBuilder:
                 "audience": parsed.audience,
                 "position": parsed.position,
                 "industry": parsed.industry,
+                "description": parsed.description,
                 "objectives": parsed.objectives,
                 "special_requirements": parsed.special_requirements,
                 "forbidden_content": parsed.forbidden_content,
