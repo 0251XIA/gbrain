@@ -941,13 +941,6 @@ async function initSession() {
         // 加载课件内容
         await loadCourseContent();
 
-        // 自动发送"开始"来启动学习
-        if (welcomeReceived) {
-            setTimeout(() => {
-                sendMessage('开始');
-            }, 500);
-        }
-
     } catch (e) {
         console.error('初始化失败:', e);
         addMessage('抱歉，连接失败了。请刷新页面重试。', 'ai');
