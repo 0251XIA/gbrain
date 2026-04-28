@@ -310,14 +310,47 @@ class SceneGenerator:
         # 简化body，只保留核心内容
         body_short = body[:200].strip() if body else ""
 
+        # 生成具体问题
+        question = self._generate_specific_question(title, body_short)
+
         return {
             'title': f'{index}. {title[:40]}',
-            'description': f"{scenario_context}，遇到以下情况：\n\n{body_short}\n\n请问你会如何处理？",
+            'description': f"{scenario_context}，遇到以下情况：\n\n{body_short}\n\n{question}",
             'knowledge_points': keywords if keywords else [title[:20]],
             'correct_answer': self._generate_correct_answer(title, body),
             'explanation': body_short,
             'hint': f'请结合"{title}"的要点来回答'
         }
+
+    def _generate_specific_question(self, title: str, body: str) -> str:
+        """生成具体明确的问题"""
+        # 根据标题/关键词生成具体问题
+        if any(kw in title for kw in ['称呼', '问候', '问好']):
+            return "请回答：见面时应该如何称呼对方？应该先说什么？"
+        elif any(kw in title for kw in ['着装', '穿着', '服装', '打扮']):
+            return "请回答：这种情况下应该如何着装？"
+        elif any(kw in title for kw in ['名片', '交换']):
+            return "请回答：交换名片时应该注意什么？"
+        elif any(kw in title for kw in ['握手', '手势']):
+            return "请回答：握手时应该注意什么礼仪？"
+        elif any(kw in title for kw in ['介绍', '自我介绍']):
+            return "请回答：如何进行自我介绍？"
+        elif any(kw in title for kw in ['拜访', '会见', '会面']):
+            return "请回答：拜访时应该如何做？"
+        elif any(kw in title for kw in ['电话', '通话']):
+            return "请回答：接听电话时应该怎么做？"
+        elif any(kw in title for kw in ['邮件', '邮件']):
+            return "请回答：撰写商务邮件时应该注意什么？"
+        elif any(kw in title for kw in ['礼仪', '礼节']):
+            return "请回答：这种情况下应该注意哪些礼仪？"
+        elif any(kw in title for kw in ['沟通', '交流']):
+            return "请回答：如何与对方有效沟通？"
+        elif any(kw in title for kw in ['送客', '告别', '送别']):
+            return "请回答：送客时应该注意什么？"
+        elif any(kw in title for kw in ['餐桌', '宴请', '用餐']):
+            return "请回答：商务宴请时应该注意什么？"
+        else:
+            return "请回答：这种情况下正确的处理方式是什么？"
 
     def _generate_correct_answer(self, title: str, body: str) -> str:
         """生成参考答案"""
