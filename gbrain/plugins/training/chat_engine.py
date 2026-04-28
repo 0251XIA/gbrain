@@ -971,6 +971,26 @@ class SceneLearningEngine:
             'scene_title': self.get_current_scene().get('title', '') if self.get_current_scene() else ''
         }
 
+    def _show_current_scene(self) -> dict:
+        """展示当前场景，等待用户回答"""
+        scene = self.get_current_scene()
+        if not scene:
+            return self._build_learning_complete()
+
+        response = {
+            'content': f"📋 【场景 {self.current_scene_index + 1}】{scene.get('title', '')}\n\n"
+                      f"{scene.get('description', '')}\n\n"
+                      f"💡 提示：{scene.get('hint', '请结合培训内容回答')}\n\n"
+                      f"请输入您的回答：",
+            'scene_index': self.current_scene_index + 1,
+            'total_scenes': len(self.scene_chain),
+            'scene_title': scene.get('title', ''),
+            'is_completed': False,
+            'awaiting_answer': True
+        }
+
+        return response
+
     async def chat(self, user_response: str) -> dict:
         """
         处理用户对当前场景的回答
@@ -981,6 +1001,13 @@ class SceneLearningEngine:
         Returns:
             包含评估结果和下一场景的 dict
         """
+        # 检查是否是"开始学习"触发词
+        is_start_trigger = user_response.strip() in ['开始', '开始学习', 'start', '学习', '继续']
+
+        # 如果是第一次输入或收到开始触发词，展示场景而非评估
+        if is_start_trigger and self.current_scene_index == 0:
+            return self._show_current_scene()
+
         current_scene = self.get_current_scene()
         if not current_scene:
             return self._build_learning_complete()
