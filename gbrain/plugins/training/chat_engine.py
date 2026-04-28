@@ -1136,7 +1136,18 @@ class SceneLearningEngine:
             response['content'] += f"📚 知识点：{', '.join(scene.get('knowledge_points', []))}\n\n"
             response['content'] += f"💡 参考答案：{scene.get('correct_answer', '')}\n\n"
             if scene.get('explanation'):
-                response['content'] += f"📖 讲解：{scene.get('explanation', '')}"
+                response['content'] += f"📖 讲解：{scene.get('explanation', '')}\n\n"
+
+        # 添加下一步引导
+        remaining = len(self.scene_chain) - self.current_scene_index - 1
+        if remaining > 0:
+            response['content'] += f"━━━━━━━━━━━━━━━\n"
+            response['content'] += f"📍 还剩 {remaining} 个场景\n"
+            response['content'] += f"输入「继续」进入下一场景"
+        else:
+            response['content'] += f"━━━━━━━━━━━━━━━\n"
+            response['content'] += f"🎉 您已完成所有场景学习！\n"
+            response['content'] += f"输入「继续」准备考核"
 
         return response
 
