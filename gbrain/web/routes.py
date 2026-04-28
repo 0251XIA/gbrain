@@ -118,6 +118,42 @@ def _clean_lecture_content(content: str) -> str:
     return '\n'.join(result)
 
 
+def _generate_course_outline(content: str) -> list[dict]:
+    """生成简洁的课程大纲"""
+    if not content:
+        return []
+
+    lines = content.split('\n')
+    modules = []
+
+    # 提取 ## 标题作为模块
+    for line in lines:
+        trimmed = line.strip()
+        # 匹配 ## 标题
+        match = re.match(r'^##\s+(.+?)$', trimmed)
+        if match:
+            title = match.group(1).strip()
+            # 排除不需要的模块
+            exclude_patterns = [
+                '基本信息', '开篇', '学习目标', '培训目标', '培训目的',
+                '准备工作', '培训场景', '模块总结', '本章小结', '行动计划'
+            ]
+            if not any(ex in title for ex in exclude_patterns):
+                modules.append({
+                    'title': title,
+                    'subsections': []
+                })
+        # 匹配 ### 标题作为子模块
+        match = re.match(r'^###\s+(.+?)$', trimmed)
+        if match and modules:
+            title = match.group(1).strip()
+            exclude_patterns = ['培训场景', '培训目标', '培训目的', '需求', '思考', '分析', '案例', '学习目标', '准备工作']
+            if not any(ex in title for ex in exclude_patterns):
+                modules[-1]['subsections'].append(title)
+
+    return modules
+
+
 def register_routes(app: FastAPI, templates: Jinja2Templates):
     """注册所有路由"""
 
@@ -307,10 +343,14 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
         # 过滤讲义内容，移除生成元数据
         clean_content = _clean_lecture_content(task.content)
 
+        # 生成课程大纲
+        course_outline = _generate_course_outline(task.content)
+
         return JSONResponse({
             "progress_id": task_id,  # 用task_id作为progress_id演示
             "task_title": task.title,
             "content": clean_content,
+            "course_outline": course_outline,
             "quiz_items": [
                 {
                     "id": q.id,

@@ -108,6 +108,51 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     border: 1px solid #cbd5e1;
 }
+
+/* 课程大纲样式 */
+.course-outline {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+}
+.course-outline h3 {
+    font-size: 1.1rem;
+    color: #1e293b;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #4361ee;
+}
+.outline-list {
+    margin: 0;
+    padding-left: 1.5rem;
+}
+.outline-module {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+.outline-subsections {
+    margin: 0.5rem 0 0.5rem 1.5rem;
+    padding-left: 0;
+    list-style-type: none;
+}
+.outline-subsection {
+    font-weight: normal;
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    padding-left: 1rem;
+    border-left: 2px solid #cbd5e1;
+}
+.course-divider {
+    height: 2px;
+    background: linear-gradient(90deg, #4361ee 0%, #764ba2 100%);
+    margin: 1.5rem 0;
+    border-radius: 2px;
+}
 .course-body thead {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
 }
@@ -981,7 +1026,9 @@ async function loadCourseContent() {
         try {
             const data = JSON.parse(cached);
             document.getElementById('task-title').textContent = data.task_title || '培训任务';
-            if (data.content) {
+            if (data.course_outline) {
+                courseContent.innerHTML = renderCourseOutline(data.course_outline);
+            } else if (data.content) {
                 courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
             }
             return;
@@ -1002,10 +1049,14 @@ async function loadCourseContent() {
 
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
-        if (data.content) {
+        if (data.course_outline && data.course_outline.length > 0) {
+            // 显示课程大纲
+            courseContent.innerHTML = renderCourseOutline(data.course_outline);
+            // 缓存到 localStorage
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+        } else if (data.content) {
             const formatted = formatPlainTextContent(data.content);
             courseContent.innerHTML = `<div class="plain-text">${formatted}</div>`;
-
             // 缓存到 localStorage
             localStorage.setItem(cacheKey, JSON.stringify(data));
         } else {
@@ -1015,6 +1066,33 @@ async function loadCourseContent() {
         console.error('加载课件失败:', e);
         courseContent.innerHTML = '<p style="color: #999;">加载失败</p>';
     }
+}
+
+// 渲染课程大纲
+function renderCourseOutline(outline) {
+    if (!outline || outline.length === 0) return '';
+
+    let html = '<div class="course-outline">';
+    html += '<h3>课程大纲</h3>';
+    html += '<ol class="outline-list">';
+
+    outline.forEach((module, idx) => {
+        html += `<li class="outline-module">${module.title}`;
+        if (module.subsections && module.subsections.length > 0) {
+            html += '<ul class="outline-subsections">';
+            module.subsections.forEach(sub => {
+                html += `<li class="outline-subsection">${sub}</li>`;
+            });
+            html += '</ul>';
+        }
+        html += '</li>';
+    });
+
+    html += '</ol></div>';
+    html += '<div class="course-divider"></div>';
+    html += '<div class="plain-text">';
+
+    return html;
 }
 
 // 提取纯讲义内容（移除元数据行、思考过程、引导性内容）
