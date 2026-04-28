@@ -181,17 +181,15 @@ class SceneGenerator:
         )
 
     def _extract_key_sections(self, content: str, num_scenes: int) -> list[dict]:
-        """从讲义内容中提取关键段落"""
+        """从讲义内容中提取关键段落，生成具体场景"""
         sections = []
 
         # 预处理：清理内容
         lines = content.split('\n')
         cleaned_lines = []
         for line in lines:
-            # 跳过空行和引导性内容
             if any(kw in line for kw in ['通过本培训', '本章将介绍', '让我们从一个问题开始']):
                 continue
-            # 跳过纯分隔线
             if re.match(r'^\|[\s\-:|]+\|$', line.strip()):
                 continue
             cleaned_lines.append(line)
@@ -202,54 +200,115 @@ class SceneGenerator:
         parts = re.split(r'^#{2,3}\s+', cleaned_content, flags=re.MULTILINE)
 
         # 提取每个部分作为场景
-        for i, part in enumerate(parts[1:num_scenes+1]):  # 跳过第一个空部分
+        for i, part in enumerate(parts[1:num_scenes+1]):
             part_lines = [l for l in part.strip().split('\n') if l.strip()]
             if not part_lines:
                 continue
 
             title = part_lines[0] if part_lines else f"内容{i+1}"
-            # 取前几行作为内容
-            content_text = '\n'.join(part_lines[:6])
-            # 清理 markdown 格式
-            content_text = re.sub(r'^[-*]\s+', '', content_text)
-            content_text = re.sub(r'\*\*(.+?)\*\*', r'\1', content_text)
+            body_lines = part_lines[1:7] if len(part_lines) > 1 else part_lines[:1]
+            body_text = '\n'.join(body_lines)
 
-            sections.append({
-                'title': title[:50],
-                'content': content_text[:300],
-                'knowledge_points': [title],
-                'correct_answer': '按照培训要求处理',
-                'explanation': content_text[:150]
-            })
+            # 清理 markdown 格式
+            body_text = re.sub(r'^[-*]\s+', '', body_text)
+            body_text = re.sub(r'\*\*(.+?)\*\*', r'\1', body_text)
+            body_text = re.sub(r'\*\s*', '', body_text)
+
+            # 生成具体场景
+            scene = self._build_scene_from_content(title, body_text, i + 1)
+            sections.append(scene)
 
         # 如果提取的不够，尝试从内容中提取关键句子作为场景
         if len(sections) < num_scenes:
-            # 找到所有包含关键动作词的行（如：服务、处理、响应、操作等）
             key_lines = []
             for line in cleaned_lines:
-                if any(kw in line for kw in ['服务', '处理', '响应', '操作', '流程', '规范', '要求']):
-                    key_lines.append(line.strip())
+                if any(kw in line for kw in ['服务', '处理', '响应', '操作', '流程', '规范', '要求', '礼仪', '着装', '拜访', '沟通']):
+                    line_clean = re.sub(r'^[-*]\s+', '', line.strip())
+                    if len(line_clean) > 10:
+                        key_lines.append(line_clean)
 
             for kw_line in key_lines[:num_scenes - len(sections)]:
                 sections.append({
-                    'title': kw_line[:30],
-                    'content': kw_line,
+                    'title': f'场景{len(sections)+1}',
+                    'description': f"请根据以下内容回答：\n\n{kw_line}",
                     'knowledge_points': [kw_line[:20]],
-                    'correct_answer': '按照培训要求处理',
-                    'explanation': kw_line
+                    'correct_answer': '结合培训内容给出完整回答',
+                    'explanation': kw_line,
+                    'hint': '请结合培训学到的知识来回答'
                 })
 
         # 如果仍然不够，补充
         while len(sections) < num_scenes:
             sections.append({
                 'title': f'场景{len(sections)+1}：综合应用',
-                'content': '根据前面学到的内容，综合处理一个复杂的工作场景',
+                'description': '结合前面学到的培训内容，综合处理这个工作场景',
                 'knowledge_points': ['综合应用'],
                 'correct_answer': '综合运用培训所学知识',
                 'explanation': '结合前面所有场景的内容来处理'
             })
 
         return sections[:num_scenes]
+
+    def _build_scene_from_content(self, title: str, body: str, index: int) -> dict:
+        """根据内容构建具体场景"""
+        # 提取关键词
+        keywords = []
+        for kw in ['礼仪', '着装', '拜访', '沟通', '服务', '处理', '规范', '要求', '电话', '邮件', '介绍', '握手', '名片']:
+            if kw in body or kw in title:
+                keywords.append(kw)
+
+        # 生成情境描述
+        if not keywords:
+            scenario_context = "在日常工作中"
+            action = "处理以下工作场景"
+        else:
+            kw = keywords[0]
+            contexts = {
+                '礼仪': '在商务交往中',
+                '着装': '在准备拜访客户时',
+                '拜访': '在拜访重要客户时',
+                '沟通': '在与同事协作时',
+                '服务': '在客户服务过程中',
+                '处理': '在处理工作时',
+                '规范': '在按照公司要求执行时',
+                '要求': '在完成工作任务时',
+                '电话': '在接听商务电话时',
+                '邮件': '在撰写商务邮件时',
+                '介绍': '在介绍公司或产品时',
+                '握手': '在与客户会面时',
+                '名片': '在交换名片时'
+            }
+            scenario_context = contexts.get(kw, '在工作中')
+
+        # 简化body，只保留核心内容
+        body_short = body[:200].strip() if body else ""
+
+        return {
+            'title': f'{index}. {title[:40]}',
+            'description': f"{scenario_context}，遇到以下情况：\n\n{body_short}\n\n请问你会如何处理？",
+            'knowledge_points': keywords if keywords else [title[:20]],
+            'correct_answer': self._generate_correct_answer(title, body),
+            'explanation': body_short,
+            'hint': f'请结合"{title}"的要点来回答'
+        }
+
+    def _generate_correct_answer(self, title: str, body: str) -> str:
+        """生成参考答案"""
+        # 根据标题生成参考答案
+        if '着装' in title or '穿着' in title:
+            return "应穿着深色西装搭配白色衬衫和深色领带，皮鞋保持光亮，体现专业形象。"
+        elif '礼仪' in title:
+            return "遵循商务礼仪规范，尊重对方，注意言行举止，给对方留下良好印象。"
+        elif '拜访' in title:
+            return "提前预约，准时到达，准备充分，注意着装和沟通礼仪。"
+        elif '沟通' in title:
+            return "使用礼貌用语，认真倾听，及时回应，保持专业态度。"
+        elif '电话' in title:
+            return "响铃三声内接听，先问候并自报家门，注意通话礼仪。"
+        elif '邮件' in title:
+            return "主题明确，内容简洁，使用礼貌用语，附件清晰标注。"
+        else:
+            return f"按照培训中关于「{title}」的要求规范处理。"
 
 
 def generate_scene_chain(lecture_content: str, num_scenes: int = 4, task_id: str = None) -> Optional[SceneChain]:
