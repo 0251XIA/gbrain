@@ -892,9 +892,28 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     agent.scene_engine.reset()
                     agent.set_stage("learning")
             else:
-                # 生成场景链
-                from gbrain.plugins.training.scene_generator import generate_scene_chain
-                scene_chain = generate_scene_chain(clean_content, num_scenes=4, task_id=task_id)
+                # 尝试从数据库加载场景链
+                db = Database()
+                saved_chain = db.get_scene_chain(task_id)
+
+                if saved_chain and saved_chain.get('scenes'):
+                    # 使用数据库中的场景链
+                    scene_chain = saved_chain['scenes']
+                else:
+                    # 生成新场景链并保存到数据库
+                    from gbrain.plugins.training.scene_generator import generate_scene_chain as gen_chain
+                    chain_obj = gen_chain(clean_content, num_scenes=4, task_id=task_id)
+                    scene_chain = [s.__dict__ for s in chain_obj.scenes] if chain_obj else []
+
+                    # 保存到数据库
+                    if scene_chain:
+                        import uuid
+                        db.insert_scene_chain({
+                            'id': str(uuid.uuid4()),
+                            'task_id': task_id,
+                            'scenes': scene_chain,
+                            'weak_points': []
+                        })
 
                 # 创建学习会话
                 learning_sessions[task_id] = LearningAgent(
@@ -902,7 +921,7 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     content=clean_content,
                     task_title=task.title,
                     progress_id=task_id,
-                    scene_chain=[s.__dict__ for s in scene_chain.scenes] if scene_chain else []
+                    scene_chain=scene_chain
                 )
 
             agent = learning_sessions[task_id]
