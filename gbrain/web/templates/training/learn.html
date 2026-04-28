@@ -972,8 +972,24 @@ function updateProgressDisplay(progress) {
     }
 }
 
-// 加载课件内容
+// 加载课件内容（带缓存）
 async function loadCourseContent() {
+    const cacheKey = `course_content_${progressId}`;
+    const cached = localStorage.getItem(cacheKey);
+
+    if (cached) {
+        try {
+            const data = JSON.parse(cached);
+            document.getElementById('task-title').textContent = data.task_title || '培训任务';
+            if (data.content) {
+                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+            }
+            return;
+        } catch (e) {
+            localStorage.removeItem(cacheKey);
+        }
+    }
+
     try {
         const res = await fetch(`/api/training/learn-by-task/${progressId}`);
         const data = await res.json();
@@ -987,9 +1003,11 @@ async function loadCourseContent() {
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
         if (data.content) {
-            // 后端已过滤，直接使用
             const formatted = formatPlainTextContent(data.content);
             courseContent.innerHTML = `<div class="plain-text">${formatted}</div>`;
+
+            // 缓存到 localStorage
+            localStorage.setItem(cacheKey, JSON.stringify(data));
         } else {
             courseContent.innerHTML = '<p style="color: #999;">暂无课件内容</p>';
         }
