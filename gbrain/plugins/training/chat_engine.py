@@ -977,14 +977,18 @@ class SceneLearningEngine:
         if not scene:
             return self._build_learning_complete()
 
+        # 获取场景标题（去掉可能重复的前缀）
+        title = scene.get('title', '')
+        title = re.sub(r'^场景?\d+[.：:]\s*', '', title)
+
         response = {
-            'content': f"📋 【场景 {self.current_scene_index + 1}】{scene.get('title', '')}\n\n"
+            'content': f"📋 【场景 {self.current_scene_index + 1}】{title}\n\n"
                       f"{scene.get('description', '')}\n\n"
                       f"💡 提示：{scene.get('hint', '请结合培训内容回答')}\n\n"
                       f"请输入您的回答：",
             'scene_index': self.current_scene_index + 1,
             'total_scenes': len(self.scene_chain),
-            'scene_title': scene.get('title', ''),
+            'scene_title': title,
             'is_completed': False,
             'awaiting_answer': True
         }
