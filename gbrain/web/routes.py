@@ -123,6 +123,8 @@ def _generate_course_outline(content: str) -> list[dict]:
     if not content:
         return []
 
+    import re
+
     lines = content.split('\n')
     modules = []
 

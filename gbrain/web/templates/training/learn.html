@@ -1026,9 +1026,9 @@ async function loadCourseContent() {
         try {
             const data = JSON.parse(cached);
             document.getElementById('task-title').textContent = data.task_title || '培训任务';
-            if (data.course_outline) {
-                courseContent.innerHTML = renderCourseOutline(data.course_outline);
-            } else if (data.content) {
+            if (data.content) {
+                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+            } else {
                 courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
             }
             return;
@@ -1049,12 +1049,8 @@ async function loadCourseContent() {
 
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
-        if (data.course_outline && data.course_outline.length > 0) {
-            // 显示课程大纲
-            courseContent.innerHTML = renderCourseOutline(data.course_outline);
-            // 缓存到 localStorage
-            localStorage.setItem(cacheKey, JSON.stringify(data));
-        } else if (data.content) {
+        // 直接显示讲义内容
+if (data.content) {
             const formatted = formatPlainTextContent(data.content);
             courseContent.innerHTML = `<div class="plain-text">${formatted}</div>`;
             // 缓存到 localStorage
@@ -1069,8 +1065,11 @@ async function loadCourseContent() {
 }
 
 // 渲染课程大纲
-function renderCourseOutline(outline) {
-    if (!outline || outline.length === 0) return '';
+function renderCourseOutline(outline, content) {
+    if (!outline || outline.length === 0) {
+        // 没有大纲时，直接渲染内容
+        return content ? `<div class="plain-text">${formatPlainTextContent(content)}</div>` : '';
+    }
 
     let html = '<div class="course-outline">';
     html += '<h3>课程大纲</h3>';
@@ -1090,7 +1089,11 @@ function renderCourseOutline(outline) {
 
     html += '</ol></div>';
     html += '<div class="course-divider"></div>';
-    html += '<div class="plain-text">';
+
+    // 添加完整的讲义内容
+    if (content) {
+        html += `<div class="plain-text">${formatPlainTextContent(content)}</div>`;
+    }
 
     return html;
 }
