@@ -27,6 +27,8 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
+        env:
+          MINIMAX_API_KEY: dummy_key_for_testing
         run: |
           pytest tests/ -v --tb=short
 

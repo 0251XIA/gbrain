@@ -12,7 +12,6 @@ LearningAgent - 引导式学习智能体
 from typing import Optional
 
 from .skills import ExplorationEngine, SceneLearningEngine, QuizEngine
-from .skills.scene_learning.generator import generate_scene_chain
 
 
 # ========== 状态定义 ==========
