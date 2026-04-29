@@ -353,21 +353,38 @@
     margin: 2.5rem 0;
 }
 
-/* 一级标题 ## */
+/* 一级标题 ## - 每个模块用不同颜色区分 */
+.course-body.plain-text h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 2rem 0 1rem 0;
+    padding: 0.5rem 0 0.5rem 1rem;
+    border-radius: 0 4px 4px 0;
+    letter-spacing: 0.01em;
+}
+/* 模块颜色循环：紫、蓝、绿、橙 */
+.course-body.plain-text h2:nth-of-type(4n+1) { border-left: 4px solid #6366f1; background: linear-gradient(90deg, #f1f5f9, transparent); }
+.course-body.plain-text h2:nth-of-type(4n+2) { border-left: 4px solid #3b82f6; background: linear-gradient(90deg, #eff6ff, transparent); }
+.course-body.plain-text h2:nth-of-type(4n+3) { border-left: 4px solid #22c55e; background: linear-gradient(90deg, #f0fdf4, transparent); }
+.course-body.plain-text h2:nth-of-type(4n+4) { border-left: 4px solid #f59e0b; background: linear-gradient(90deg, #fffbeb, transparent); }
+.course-body.plain-text h2:first-child { margin-top: 0; }
+
+/* 兼容旧的 section-title 类名 */
 .course-body.plain-text .section-title {
     font-size: 1.2rem;
     font-weight: 600;
     color: #1e293b;
     margin: 2rem 0 1rem 0;
     padding: 0.5rem 0 0.5rem 1rem;
-    border-left: 4px solid #6366f1;
-    background: linear-gradient(90deg, #f1f5f9, transparent);
     border-radius: 0 4px 4px 0;
     letter-spacing: 0.01em;
 }
-.course-body.plain-text .section-title:first-child {
-    margin-top: 0;
-}
+.course-body.plain-text .section-title:nth-of-type(4n+1) { border-left: 4px solid #6366f1; background: linear-gradient(90deg, #f1f5f9, transparent); }
+.course-body.plain-text .section-title:nth-of-type(4n+2) { border-left: 4px solid #3b82f6; background: linear-gradient(90deg, #eff6ff, transparent); }
+.course-body.plain-text .section-title:nth-of-type(4n+3) { border-left: 4px solid #22c55e; background: linear-gradient(90deg, #f0fdf4, transparent); }
+.course-body.plain-text .section-title:nth-of-type(4n+4) { border-left: 4px solid #f59e0b; background: linear-gradient(90deg, #fffbeb, transparent); }
+.course-body.plain-text .section-title:first-child { margin-top: 0; }
 
 /* 二级标题 ### */
 .course-body.plain-text .sub-title {
@@ -822,8 +839,23 @@
 {% endblock %}
 
 {% block extra_script %}
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
+// 安全 HTML 渲染：先用 marked 解析，再用 DOMPurify 净化
+function safeMarked(content) {
+    if (!content) return '';
+    return DOMPurify.sanitize(marked.parse(content));
+}
+
+// 配置 marked.js 输出兼容现有 CSS
+marked.setOptions({
+    breaks: true,
+    gfm: true,
+    headerIds: false,
+    mangle: false
+});
+
 const progressId = "{{ progress_id }}";
 let sessionId = null;
 
@@ -855,7 +887,7 @@ function addMessage(content, type, showTime = true) {
     let formattedContent = formatLearningContent(content);
 
     // 解析 markdown
-    const parsed = marked.parse(formattedContent);
+    const parsed = safeMarked(formattedContent);
     const timeStr = showTime ? `<div class="message-time">${formatTime(new Date())}</div>` : '';
 
     if (type === 'ai') {
@@ -1027,9 +1059,9 @@ async function loadCourseContent() {
             const data = JSON.parse(cached);
             document.getElementById('task-title').textContent = data.task_title || '培训任务';
             if (data.content) {
-                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+                courseContent.innerHTML = `<div class="plain-text">${safeMarked(data.content)}</div>`;
             } else {
-                courseContent.innerHTML = `<div class="plain-text">${formatPlainTextContent(data.content)}</div>`;
+                courseContent.innerHTML = `<div class="plain-text">${safeMarked(data.content)}</div>`;
             }
             return;
         } catch (e) {
@@ -1049,10 +1081,10 @@ async function loadCourseContent() {
 
         document.getElementById('task-title').textContent = data.task_title || '培训任务';
 
-        // 直接显示讲义内容
-if (data.content) {
-            const formatted = formatPlainTextContent(data.content);
-            courseContent.innerHTML = `<div class="plain-text">${formatted}</div>`;
+        // 直接显示讲义内容（使用 marked.js 统一渲染）
+        if (data.content) {
+            const parsed = safeMarked(data.content);
+            courseContent.innerHTML = `<div class="plain-text">${parsed}</div>`;
             // 缓存到 localStorage
             localStorage.setItem(cacheKey, JSON.stringify(data));
         } else {
@@ -1067,8 +1099,8 @@ if (data.content) {
 // 渲染课程大纲
 function renderCourseOutline(outline, content) {
     if (!outline || outline.length === 0) {
-        // 没有大纲时，直接渲染内容
-        return content ? `<div class="plain-text">${formatPlainTextContent(content)}</div>` : '';
+        // 没有大纲时，直接渲染内容（使用 marked.js 统一渲染）
+        return content ? `<div class="plain-text">${safeMarked(content)}</div>` : '';
     }
 
     let html = '<div class="course-outline">';
@@ -1090,9 +1122,9 @@ function renderCourseOutline(outline, content) {
     html += '</ol></div>';
     html += '<div class="course-divider"></div>';
 
-    // 添加完整的讲义内容
+    // 添加完整的讲义内容（使用 marked.js 统一渲染）
     if (content) {
-        html += `<div class="plain-text">${formatPlainTextContent(content)}</div>`;
+        html += `<div class="plain-text">${safeMarked(content)}</div>`;
     }
 
     return html;
@@ -1465,7 +1497,7 @@ async function sendMessage(message) {
 
                 if (parsed.content) {
                     fullContent += parsed.content;
-                    contentDiv.innerHTML = marked.parse(fullContent);
+                    contentDiv.innerHTML = safeMarked(fullContent);
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 

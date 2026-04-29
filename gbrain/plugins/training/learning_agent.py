@@ -1,20 +1,26 @@
 """
 LearningAgent - 引导式学习智能体
 
-状态机：learning -> ready_to_quiz -> quiz -> completed/failed
-学习70% + 考核30%，考核不可重考
+支持三种模式：
+1. 探索模式 - 自由问答
+2. 学习模式 - 场景引导学习
+3. 考核模式 - 测验考核
+
+默认进入探索模式，用户可通过关键词切换模式
 """
 
 from typing import Optional
 
-from .chat_engine import QuizEngine, SceneLearningEngine
+from .skills import ExplorationEngine, SceneLearningEngine, QuizEngine
+from .skills.scene_learning.generator import generate_scene_chain
 
 
 # ========== 状态定义 ==========
 
-VALID_STAGES = ["learning", "ready_to_quiz", "quiz", "completed", "failed"]
+VALID_STAGES = ["exploration", "learning", "ready_to_quiz", "quiz", "completed", "failed"]
 
 STAGE_DESCRIPTIONS = {
+    "exploration": "自由探索",
     "learning": "场景学习中",
     "ready_to_quiz": "准备考核",
     "quiz": "参加考核",
@@ -22,24 +28,55 @@ STAGE_DESCRIPTIONS = {
     "failed": "考核未通过"
 }
 
+MODE_TRIGGERS = {
+    "exploration": ["探索", "问答", "提问", "不懂", "解释", "探索模式"],
+    "learning": ["学习", "场景学习", "开始学习", "学习模式"],
+    "quiz": ["考核", "考试", "测验", "考核模式"]
+}
+
 WELCOME_MESSAGES = {
-    "learning": """欢迎开始学习！
+    "exploration": """🔍 **探索模式**
 
-我将带你通过真实工作场景来学习这份培训内容。
-每个场景先让你思考如何处理，然后再给出正确答案和讲解。
+欢迎使用探索模式！我可以帮你：
 
-准备好开始第一个场景了吗？
+• 解答关于培训内容的问题
+• 解释专业术语和概念
+• 提供具体的例子和案例
+• 引导你深入理解知识点
 
-输入"开始"启动学习！""",
+**使用方式：**
+- 直接输入你的问题，我会尽力解答
+- 输入「学习模式」切换到场景学习
+- 输入「考核模式」切换到测验考核
+
+有什么想问的吗？""",
+
+    "learning": """🎯 **学习模式**
+
+欢迎进入学习模式！我将通过真实工作场景带你学习培训内容。
+
+学习流程：
+1. 📋 展示工作场景
+2. 💭 你思考如何处理
+3. ✅ 我评估你的回答并讲解
+4. ➡️ 进入下一场景
+
+**使用方式：**
+- 输入「开始」启动学习
+- 输入「继续」进入下一场景
+- 输入「探索模式」切换到自由问答
+- 输入「考核模式」切换到测验考核
+
+准备好了吗？输入「开始」开始学习！""",
 
     "ready_to_quiz": """恭喜完成所有场景学习！
 
 你已经掌握了培训的核心内容。
 准备好参加考核了吗？
 
-输入"开始考核"进入考核环节。""",
+输入「考核模式」进入考核环节。""",
 
-    "quiz": """考核环节开始！
+    "quiz": """📝 **考核模式**
 
 准备好接受考核了吗？
 - 选择题请输入 A/B/C/D
@@ -48,7 +85,7 @@ WELCOME_MESSAGES = {
 
 注意：考核只有一次机会，请认真作答。
 
-输入"开始考核"或任意内容开始第一题。""",
+输入「开始考核」或任意内容开始第一题。""",
 
     "completed": """🎉 恭喜完成学习和考核！
 
@@ -59,7 +96,7 @@ WELCOME_MESSAGES = {
 
 由于考核只有一次机会，你需要重新学习整个培训内容后，才能再次参加考核。
 
-输入"重新学习"开始新一轮学习。""",
+输入「重新学习」开始新一轮学习。"""
 }
 
 
@@ -76,7 +113,7 @@ class LearningAgent:
     引导式学习智能体
 
     负责协调场景学习引擎和考核引擎，管理学习状态流转。
-    学习70% + 考核30%，考核不可重考。
+    学习30% + 考核70%，考核不可重考。
     """
 
     def __init__(self, task_id: str, content: str, task_title: str, progress_id: str = None,
@@ -99,9 +136,10 @@ class LearningAgent:
         # 状态机
         self._stage: str = "learning"
 
-        # 初始化场景学习引擎
-        self.scene_engine = SceneLearningEngine(content, scene_chain)
-        self.quiz_engine = QuizEngine(content)
+        # 初始化场景学习引擎（参数顺序：content, topic, scene_chain）
+        self.scene_engine = SceneLearningEngine(content, task_title, scene_chain)
+        self.quiz_engine = QuizEngine(content, task_title)
+        self.exploration_engine = ExplorationEngine(content, task_title)
 
         # 学习得分（来自场景学习）
         self._learning_score: float = 0.0
@@ -188,6 +226,11 @@ class LearningAgent:
         Returns:
             响应格式的 dict
         """
+        # 检查是否触发模式切换
+        mode_switch = self._detect_mode_switch(message)
+        if mode_switch and mode_switch != self._stage:
+            return await self._switch_mode(mode_switch, message)
+
         # 检查是否触发考核
         if self._is_quiz_trigger(message) and self._stage in ["learning", "ready_to_quiz"]:
             return await self._start_quiz()
@@ -199,6 +242,8 @@ class LearningAgent:
         # 根据当前阶段处理对话
         if self._stage == "learning":
             return await self._handle_learning(message)
+        elif self._stage == "exploration":
+            return await self._handle_exploration(message)
         elif self._stage == "ready_to_quiz":
             return self._build_response(
                 message_type="message",
@@ -249,8 +294,8 @@ class LearningAgent:
         learning_score = self.scene_engine.learning_score
         response = "📋 考核开始！\n\n"
         response += f"共 {len(quiz_items)} 道题，满分100分。\n"
-        response += f"其中学习得分占 {learning_score:.0f} 分（70%权重），\n"
-        response += f"考核得分占 100 分（30%权重）。\n"
+        response += f"其中学习得分占 {learning_score:.0f} 分（30%权重），\n"
+        response += f"考核得分占 100 分（70%权重）。\n"
         response += f"70分及格。\n\n"
         response += f"第一题：\n{first_question['question']}\n"
 
@@ -267,8 +312,8 @@ class LearningAgent:
                 "quiz_started": True,
                 "question_index": 0,
                 "learning_score": learning_score,
-                "learning_weight": 0.7,
-                "quiz_weight": 0.3
+                "learning_weight": 0.3,
+                "quiz_weight": 0.7
             }
         )
 
@@ -296,12 +341,13 @@ class LearningAgent:
         """处理场景学习"""
         result = await self.scene_engine.chat(message)
 
-        # 更新学习得分
-        self._learning_score = result.get('learning_score', 0)
+        # 更新学习得分（scene_engine.learning_score 已更新）
+        self._learning_score = self.scene_engine.learning_score
 
-        response_content = result.get('content', '')
+        # SceneLearningResult 是 dataclass，直接访问属性
+        response_content = result.content
 
-        if result.get('is_completed'):
+        if result.is_completed:
             # 学习完成，进入准备考核阶段
             self.set_stage("ready_to_quiz")
             response_content += f"\n\n{WELCOME_MESSAGES.get('ready_to_quiz', '')}"
@@ -311,14 +357,12 @@ class LearningAgent:
             content=response_content,
             metadata={
                 "scene_result": {
-                    "is_correct": result.get('evaluation', {}).get('is_correct', False),
-                    "score": result.get('evaluation', {}).get('score', 0),
-                    "feedback": result.get('evaluation', {}).get('feedback', '')
+                    "is_correct": result.evaluation.get('is_correct', False) if result.evaluation else False,
+                    "score": result.evaluation.get('score', 0) if result.evaluation else 0,
+                    "feedback": result.evaluation.get('feedback', '') if result.evaluation else ''
                 },
-                "next_scene": result.get('next_scene'),
-                "is_completed": result.get('is_completed', False),
-                "learning_score": self._learning_score,
-                "weak_points": result.get('weak_points', [])
+                "is_completed": result.is_completed,
+                "learning_score": self._learning_score
             }
         )
 
@@ -344,7 +388,82 @@ class LearningAgent:
             "learning_score": self._learning_score,
         }
 
-    # ========== 内部方法 ==========
+# ========== 内部方法 ==========
+
+    MODE_NAME_MAP = {
+    "探索": "exploration",
+    "探索模式": "exploration",
+    "学习": "learning",
+    "学习模式": "learning",
+    "考核": "quiz",
+    "考核模式": "quiz",
+}
+
+    def _detect_mode_switch(self, message: str) -> Optional[str]:
+        """检测是否需要切换模式"""
+        msg_lower = message.lower().strip()
+
+        # 检查是否精确匹配模式名称
+        if msg_lower in self.MODE_NAME_MAP:
+            return self.MODE_NAME_MAP[msg_lower]
+
+        # 检查触发词
+        for mode, triggers in MODE_TRIGGERS.items():
+            for trigger in triggers:
+                if trigger in msg_lower:
+                    return mode
+        return None
+
+    async def _switch_mode(self, new_mode: str, original_message: str) -> dict:
+        """切换到指定模式"""
+        self.set_stage(new_mode)
+
+        if new_mode == "exploration":
+            # 如果用户消息包含实际的问题内容（不只是模式切换），用这个问题
+            question = original_message
+            for trigger in MODE_TRIGGERS.get("exploration", []):
+                question = question.replace(trigger, "").strip()
+
+            # 移除残余的"模式"等无意义词
+            question = question.replace("模式", "").strip()
+
+            if question:
+                result = self.exploration_engine.chat(question)
+                return self._build_response(
+                    message_type="exploration",
+                    content=result.content,
+                    metadata={"mode": "exploration", "suggestions": result.suggestions}
+                )
+            else:
+                # 只有模式切换指令，显示欢迎消息，不回答任何问题
+                welcome = self.exploration_engine.get_welcome_message()
+                return self._build_response(
+                    message_type="exploration",
+                    content=welcome,
+                    metadata={"mode": "exploration", "suggestions": []}
+                )
+        elif new_mode == "learning":
+            return self._build_response(
+                message_type="scene",
+                content=WELCOME_MESSAGES.get("learning", ""),
+                metadata={"mode": "learning"}
+            )
+        elif new_mode == "quiz":
+            return await self._start_quiz()
+
+        return self._build_response(
+            message_type="message",
+            content="未知模式"
+        )
+
+    async def _handle_exploration(self, message: str) -> dict:
+        """处理探索模式对话"""
+        result = self.exploration_engine.chat(message)
+        return self._build_response(
+            message_type="exploration",
+            content=result.content,
+            metadata={"mode": "exploration", "suggestions": result.suggestions}
+        )
 
     def _is_quiz_trigger(self, message: str) -> bool:
         """检查是否是触发考核的指令"""
@@ -353,6 +472,7 @@ class LearningAgent:
     def _get_response_type(self) -> str:
         """获取当前阶段对应的响应类型"""
         type_mapping = {
+            "exploration": "exploration",
             "learning": "scene",
             "ready_to_quiz": "message",
             "quiz": "quiz",
@@ -364,6 +484,7 @@ class LearningAgent:
     def _get_engine_name(self) -> Optional[str]:
         """获取当前引擎名称"""
         engine_mapping = {
+            "exploration": "ExplorationEngine",
             "learning": "SceneLearningEngine",
             "quiz": "QuizEngine",
         }
@@ -409,10 +530,9 @@ class LearningAgent:
             # 考核结束，处理结果
             quiz_score = self.quiz_engine.get_score()
 
-            # 计算总分 = 学习得分(70%) + 考核得分(30%)
-            # 但考核满分是100，学习满分是100，这里需要转换
-            # 学习得分占 70 分，考核得分占 30 分
-            total_score = self._learning_score * 0.7 + quiz_score * 0.3
+            # 计算总分 = 学习得分(30%) + 考核得分(70%)
+            # 学习得分占 30 分，考核得分占 70 分
+            total_score = self._learning_score * 0.3 + quiz_score * 0.7
             passed = total_score >= 70
 
             # 保存考核记录

@@ -977,9 +977,13 @@ class SceneLearningEngine:
         if not scene:
             return self._build_learning_complete()
 
-        # 获取场景标题（去掉可能重复的前缀）
+        # 获取场景标题（去掉可能重复的前缀和冗余序号）
         title = scene.get('title', '')
+        # 去掉开头的"场景X："或"场景 X"
         title = re.sub(r'^场景?\d+[.：:]\s*', '', title)
+        # 去掉开头多余的序号如"2. "、"二、"、"（二）"等
+        title = re.sub(r'^[一二三四五六七八九十0-9]+[.、)）\s]+', '', title)
+        title = re.sub(r'^\([一二三四五六七八九十0-9]+\)\s*', '', title)
 
         response = {
             'content': f"📋 【场景 {self.current_scene_index + 1}】{title}\n\n"
@@ -1005,8 +1009,14 @@ class SceneLearningEngine:
 
         # 展示下一场景
         scene = self.get_current_scene()
+        # 清理标题
+        scene_title = scene.get('title', '')
+        scene_title = re.sub(r'^场景?\d+[.：:]\s*', '', scene_title)
+        scene_title = re.sub(r'^[一二三四五六七八九十0-9]+[.、)）\s]+', '', scene_title)
+        scene_title = re.sub(r'^\([一二三四五六七八九十0-9]+\)\s*', '', scene_title)
+
         return {
-            'content': f"📋 【场景 {self.current_scene_index + 1}】{scene.get('title', '')}\n\n"
+            'content': f"📋 【场景 {self.current_scene_index + 1}】{scene_title}\n\n"
                       f"{scene.get('description', '')}\n\n"
                       f"💡 提示：{scene.get('hint', '请结合培训内容回答')}\n\n"
                       f"请输入您的回答：",

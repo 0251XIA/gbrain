@@ -506,32 +506,37 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 if not topic:
                     return JSONResponse({"success": False, "error": "培训主题不能为空"}, status_code=400)
 
-                # 如果有选择知识库文件，获取内容
+                # 如果有选择知识库文件，获取内容并追加到 file_contents
                 kb_raw_contents = []
                 kb_load_warnings = []
                 invalid_file_ids = []
-                if content_source and not file_contents:
+                if content_source:
                     db = Database()
                     found_count = 0
                     for page_id in content_source:
                         page = db.get_page(page_id)
                         if page:
-                            kb_content = page.get('content', '')
+                            kb_content = page.get('content', '') or ''
                             kb_raw_contents.append(kb_content)
-                            file_contents.append(kb_content)
-                            found_count += 1
+                            # 始终追加知识库内容（与上传文件共存）
+                            if kb_content and kb_content.strip():
+                                file_contents.append(kb_content)
+                                found_count += 1
+                            else:
+                                kb_load_warnings.append(f"知识库文件「{page.get('title', page_id)}」内容为空")
                             logger.info(f"成功读取 KB page: {page_id}, title={page.get('title','')}, content_len={len(kb_content)}")
                         else:
                             invalid_file_ids.append(page_id)
                             kb_load_warnings.append(f"知识库文件 {page_id} 未找到")
                             logger.warning(f"KB page 未找到: {page_id}")
-                    if invalid_file_ids:
-                        logger.warning(f"无效的知识库文件 IDs: {invalid_file_ids}")
-                    logger.info(f"Loaded {found_count}/{len(content_source)} KB pages, content_source={content_source}")
-                    if found_count == 0 and content_source:
+                    if kb_load_warnings:
+                        logger.warning(f"部分知识库文件加载警告: {kb_load_warnings}")
+                    logger.info(f"Loaded {found_count}/{len(content_source)} KB pages with content, content_source={content_source}")
+                    # 只有当所有知识库文件都无效时才报错（用户可能没上传文件）
+                    if found_count == 0 and content_source and not file_contents:
                         return JSONResponse({
                             "success": False,
-                            "error": f"选定的知识库文件均未找到，请重新选择有效的文件。无效的文件ID: {invalid_file_ids}"
+                            "error": f"选定的知识库文件均无有效内容，请上传文件或选择其他文件。无效文件: {invalid_file_ids + [p.split('「')[1].split('」')[0] for p in kb_load_warnings if '内容为空' in p]}"
                         }, status_code=400)
 
                 # 构建章节结构：根据用户描述生成，优先使用描述中的关键词
@@ -929,10 +934,9 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             # 检查是否有已存在的会话
             if task_id in learning_sessions:
                 agent = learning_sessions[task_id]
-                # 如果是重新开始学习，重置会话
-                if agent.stage in ["completed", "failed"]:
-                    agent.scene_engine.reset()
-                    agent.set_stage("learning")
+                # 重新开始学习，重置会话状态
+                agent.scene_engine.reset()
+                agent.set_stage("learning")
             else:
                 # 尝试从数据库加载场景链
                 db = Database()
@@ -943,8 +947,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     scene_chain = saved_chain['scenes']
                 else:
                     # 生成新场景链并保存到数据库
-                    from gbrain.plugins.training.scene_generator import generate_scene_chain as gen_chain
-                    chain_obj = gen_chain(clean_content, num_scenes=4, task_id=task_id)
+                    from gbrain.plugins.training.skills.scene_learning.generator import generate_scene_chain as gen_chain
+                    chain_obj = gen_chain(clean_content, task_id=task_id)
                     scene_chain = [s.__dict__ for s in chain_obj.scenes] if chain_obj else []
 
                     # 保存到数据库
@@ -1002,8 +1006,12 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
             agent = learning_sessions[task_id]
 
             async def event_stream():
-                response = await agent.chat(message)
-                yield f"data: {json.dumps(response, ensure_ascii=False)}\n\n"
+                try:
+                    response = await agent.chat(message)
+                    yield f"data: {json.dumps(response, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    logger.exception(f"Chat error: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'content': '处理失败，请重试'}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
 
             return StreamingResponse(
