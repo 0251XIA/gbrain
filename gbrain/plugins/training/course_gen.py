@@ -133,7 +133,7 @@ def hybrid_search(query: str, top_k: int = 5) -> list[dict]:
 
 
 def call_llm(prompt: str, system_prompt: str = "") -> str:
-    """调用 MiniMax API 生成内容"""
+    """调用 MiniMax API 生成内容（同步版本）"""
     import requests
     from gbrain.config import MINIMAX_API_KEY, MINIMAX_BASE_URL, MODEL_NAME
 
@@ -164,6 +164,12 @@ def call_llm(prompt: str, system_prompt: str = "") -> str:
         return result["choices"][0]["message"]["content"]
     except Exception as e:
         raise Exception(f"LLM 调用失败: {str(e)}")
+
+
+async def call_llm_async(prompt: str, system_prompt: str = "") -> str:
+    """调用 MiniMax API 生成内容（异步版本，使用线程池避免阻塞）"""
+    import asyncio
+    return await asyncio.to_thread(call_llm, prompt, system_prompt)
 
 
 class CourseGenerator:

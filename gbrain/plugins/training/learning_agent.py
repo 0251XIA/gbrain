@@ -9,6 +9,7 @@ LearningAgent - 引导式学习智能体
 默认进入探索模式，用户可通过关键词切换模式
 """
 
+import asyncio
 from typing import Optional
 
 from .skills import ExplorationEngine, SceneLearningEngine, QuizEngine
@@ -78,13 +79,23 @@ WELCOME_MESSAGES = {
     "quiz": """📝 **考核模式**
 
 准备好接受考核了吗？
+
+**考核说明：**
+- 题型包括：选择题、判断题、简答题
+- 共 7 道题，满分 100 分
+- 学习得分占 30%，考核得分占 70%
+- 70 分及格
+
+**作答方式：**
 - 选择题请输入 A/B/C/D
 - 判断题请输入 对/错
 - 简答题请直接输入你的答案
 
-注意：考核只有一次机会，请认真作答。
+⚠️ 注意：考核只有一次机会，请认真作答！
 
-输入「开始考核」或任意内容开始第一题。""",
+---
+
+输入「**开始**」开始考核。""",
 
     "completed": """🎉 恭喜完成学习和考核！
 
@@ -142,6 +153,9 @@ class LearningAgent:
 
         # 学习得分（来自场景学习）
         self._learning_score: float = 0.0
+
+        # 考核是否已开始（等待用户输入"开始"后才开始）
+        self._quiz_started: bool = False
 
         # 当前活跃引擎
         self._current_engine = self.scene_engine
@@ -268,8 +282,10 @@ class LearningAgent:
 
     async def _start_quiz(self) -> dict:
         """开始考核"""
-        # 基于场景学习结果生成考核题
-        quiz_items = self.scene_engine.generate_quiz_items(num_questions=7)
+        # 基于场景学习结果生成考核题（在线程池中运行避免阻塞）
+        quiz_items = await asyncio.to_thread(
+            self.scene_engine.generate_quiz_items, num_questions=7
+        )
 
         if not quiz_items:
             return self._build_response(
@@ -291,18 +307,29 @@ class LearningAgent:
 
         # 构建总分计算说明
         learning_score = self.scene_engine.learning_score
+        question_type_text = {
+            'choice': '选择题',
+            'true_false': '判断题',
+            'judge': '判断题',
+            'blank': '简答题'
+        }.get(first_question.get('question_type', 'choice'), '选择题')
+
         response = "📋 考核开始！\n\n"
-        response += f"共 {len(quiz_items)} 道题，满分100分。\n"
+        response += f"共 {len(quiz_items)} 道题，满分 100 分。\n"
         response += f"其中学习得分占 {learning_score:.0f} 分（30%权重），\n"
         response += f"考核得分占 100 分（70%权重）。\n"
-        response += f"70分及格。\n\n"
-        response += f"第一题：\n{first_question['question']}\n"
+        response += f"70 分及格。\n\n"
+        response += f"📝 第一题（{question_type_text}）\n\n"
+        response += f"{first_question['question']}\n\n"
 
         if first_question['question_type'] == 'choice':
             for opt in first_question['options']:
-                response += f"  {opt}\n"
-        elif first_question['question_type'] == 'judge':
-            response += "  A. 对  B. 错\n"
+                response += f"{opt}\n"
+            response += "\n请输入 A/B/C/D 作答"
+        elif first_question['question_type'] in ('judge', 'true_false'):
+            response += "A. 对  B. 错\n\n请输入 对/错 作答"
+        else:
+            response += "\n请输入你的答案"
 
         return self._build_response(
             message_type="quiz",
@@ -320,6 +347,7 @@ class LearningAgent:
         """重新开始学习"""
         self.scene_engine.reset()
         self._learning_score = 0.0
+        self._quiz_started = False
         self.set_stage("learning")
 
         scene = self.scene_engine.get_current_scene()
@@ -417,38 +445,59 @@ class LearningAgent:
         """切换到指定模式"""
         self.set_stage(new_mode)
 
+        # 检查原始消息是否只是纯模式切换指令
+        msg_lower = original_message.lower().strip()
+
+        # 纯模式切换词（不带"开始"）
+        pure_mode_triggers = {
+            "exploration": ["探索", "探索模式", "问答"],
+            "learning": ["学习模式"],
+            "quiz": ["考核模式"]
+        }
+
+        is_pure_mode_switch = msg_lower in [t.lower() for t in pure_mode_triggers.get(new_mode, [])]
+
+        # 有"开始"等触发词，按各模式处理
         if new_mode == "exploration":
-            # 如果用户消息包含实际的问题内容（不只是模式切换），用这个问题
-            question = original_message
-            for trigger in MODE_TRIGGERS.get("exploration", []):
-                question = question.replace(trigger, "").strip()
+            if not is_pure_mode_switch:
+                question = original_message
+                for trigger in MODE_TRIGGERS.get("exploration", []):
+                    question = question.replace(trigger, "").strip()
+                question = question.replace("模式", "").strip()
 
-            # 移除残余的"模式"等无意义词
-            question = question.replace("模式", "").strip()
-
-            if question:
-                result = self.exploration_engine.chat(question)
-                return self._build_response(
-                    message_type="exploration",
-                    content=result.content,
-                    metadata={"mode": "exploration", "suggestions": result.suggestions}
-                )
-            else:
-                # 只有模式切换指令，显示欢迎消息，不回答任何问题
-                welcome = self.exploration_engine.get_welcome_message()
-                return self._build_response(
-                    message_type="exploration",
-                    content=welcome,
-                    metadata={"mode": "exploration", "suggestions": []}
-                )
+                if question:
+                    result = self.exploration_engine.chat(question)
+                    return self._build_response(
+                        message_type="exploration",
+                        content=result.content,
+                        metadata={"mode": "exploration", "suggestions": result.suggestions}
+                    )
+            # 纯模式切换或无问题，显示欢迎消息
+            return self._build_response(
+                message_type="exploration",
+                content=WELCOME_MESSAGES.get("exploration", ""),
+                metadata={"mode": "exploration", "suggestions": []}
+            )
         elif new_mode == "learning":
+            # 如果包含"开始"，直接开始学习
+            if not is_pure_mode_switch and ("开始" in msg_lower or msg_lower == "学习"):
+                return await self._handle_learning("开始")
             return self._build_response(
                 message_type="scene",
                 content=WELCOME_MESSAGES.get("learning", ""),
                 metadata={"mode": "learning"}
             )
         elif new_mode == "quiz":
-            return await self._start_quiz()
+            # 如果包含"开始"，直接开始考核
+            if not is_pure_mode_switch and ("开始" in msg_lower or msg_lower in ["考核", "考试", "测验"]):
+                self._quiz_started = True
+                return await self._start_quiz()
+            self._quiz_started = False
+            return self._build_response(
+                message_type="message",
+                content=WELCOME_MESSAGES.get("quiz", ""),
+                metadata={"mode": "quiz"}
+            )
 
         return self._build_response(
             message_type="message",
@@ -457,7 +506,8 @@ class LearningAgent:
 
     async def _handle_exploration(self, message: str) -> dict:
         """处理探索模式对话"""
-        result = self.exploration_engine.chat(message)
+        # 在线程池中运行避免阻塞事件循环
+        result = await asyncio.to_thread(self.exploration_engine.chat, message)
         return self._build_response(
             message_type="exploration",
             content=result.content,
@@ -521,6 +571,19 @@ class LearningAgent:
 
     async def _handle_quiz(self, message: str) -> dict:
         """处理考核阶段对话"""
+        # 检查是否等待用户确认开始考核
+        if not self._quiz_started:
+            # 检查是否触发开始考核
+            if message.strip() in ["开始", "开始考核", "考核", "start"]:
+                self._quiz_started = True
+                return await self._start_quiz()
+            else:
+                # 未输入"开始"，提示用户
+                return self._build_response(
+                    message_type="message",
+                    content=WELCOME_MESSAGES.get("quiz", "")
+                )
+
         response = await self.quiz_engine.chat(message)
 
         # 检查是否考核结束

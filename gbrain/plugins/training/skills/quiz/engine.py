@@ -148,11 +148,14 @@ class QuizEngine:
 
     async def _evaluate_answer(self, question: QuizItem, user_answer: str) -> dict:
         """评估答案"""
-        # 标准化答案
+        # 标准化答案：去除空白、标点，转大写
         user_answer = user_answer.strip().upper()
+        # 去除常见标点符号
+        user_answer = user_answer.replace('。', '').replace('.', '').replace('，', '').replace(',', '')
 
         # 选择题直接比对
         if question.type == 'choice':
+            # 支持 A/B/C/D 或 a/b/c/d
             correct = user_answer == question.correct_answer.upper()
             return {
                 'correct': correct,
@@ -179,8 +182,8 @@ class QuizEngine:
                 question=question.question,
                 user_answer=user_answer
             )
-            from gbrain.plugins.training.course_gen import call_llm
-            response = call_llm(prompt, "")
+            from gbrain.plugins.training.course_gen import call_llm_async
+            response = await call_llm_async(prompt, "")
 
             import re
             import json
@@ -212,7 +215,11 @@ class QuizEngine:
         feedback += f"\n\n📖 解析：{evaluation.get('explanation', question.explanation)}"
 
         if not evaluation.get('correct'):
-            feedback += f"\n\n正确答案：{question.correct_answer}"
+            # 将 correct_answer 转为字母显示
+            correct = question.correct_answer
+            if correct.isdigit():
+                correct = chr(65 + int(correct))  # 0->A, 1->B, 2->C, 3->D
+            feedback += f"\n\n正确答案：{correct}"
 
         return feedback
 
@@ -255,12 +262,32 @@ class QuizEngine:
         self.questions = []
         for item in items:
             if isinstance(item, dict):
+                # 转换 correct_index (0,1,2,3) 为字母 (A,B,C,D)
+                correct_idx = item.get('correct_index', 0)
+
+                # 尝试将 correct_idx 转为数字
+                if isinstance(correct_idx, str):
+                    # 尝试解析为数字
+                    try:
+                        correct_idx = int(correct_idx)
+                    except ValueError:
+                        # 如果是字母 A/B/C/D，转为数字
+                        if correct_idx.upper() in ('A', 'B', 'C', 'D'):
+                            correct_idx = ord(correct_idx.upper()) - ord('A')
+                        else:
+                            correct_idx = 0
+
+                if isinstance(correct_idx, int) and correct_idx >= 0:
+                    correct_answer = chr(65 + correct_idx)  # 0->A, 1->B, 2->C, 3->D
+                else:
+                    correct_answer = str(correct_idx)
+
                 self.questions.append(QuizItem(
                     id=item.get('id', f'q{len(self.questions)+1}'),
                     type=item.get('question_type', 'choice'),
                     question=item.get('question', ''),
                     options=item.get('options', []),
-                    correct_answer=str(item.get('correct_index', 0)),
+                    correct_answer=correct_answer,
                     explanation=item.get('explanation', '')
                 ))
             else:

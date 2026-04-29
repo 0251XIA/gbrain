@@ -194,8 +194,8 @@ class SceneLearningEngine:
         )
 
         try:
-            from gbrain.plugins.training.course_gen import call_llm
-            response_text = call_llm(prompt, "")
+            from gbrain.plugins.training.course_gen import call_llm_async
+            response_text = await call_llm_async(prompt, "")
 
             # 解析 JSON
             import json

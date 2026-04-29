@@ -2,11 +2,12 @@
 对话引擎 - 培训场景下的 AI 对话交互
 """
 
+import asyncio
 import re
 import json
 from typing import Optional
 
-from gbrain.plugins.training.course_gen import call_llm
+from gbrain.plugins.training.course_gen import call_llm_async
 
 
 # ========== 系统提示词模板 ==========
@@ -70,7 +71,7 @@ class ChatEngine:
         """
         self.add_message("user", user_input)
 
-        response = call_llm(
+        response = await call_llm_async(
             prompt=user_input,
             system_prompt=self.system_prompt
         )
@@ -652,7 +653,7 @@ class QAEngine(ChatEngine):
 课件内容：
 {self.content[:3000]}
 """
-        response = call_llm(prompt, self.system_prompt)
+        response = await call_llm_async(prompt, self.system_prompt)
         self.add_message("user", user_input)
         self.add_message("assistant", response)
         return response
@@ -808,7 +809,7 @@ class QuizEngine(ChatEngine):
 请直接给出一个0-15的分数，只输出数字："""
 
         try:
-            response = call_llm(prompt, "")
+            response = await call_llm_async(prompt, "")
             match = re.search(r'\d+', response.strip())
             if match:
                 score = float(match.group())
@@ -1119,7 +1120,7 @@ class SceneLearningEngine:
 - 敷衍或不相关回答给0-3分"""
 
         try:
-            response = call_llm(prompt, "")
+            response = await call_llm_async(prompt, "")
             # 提取 JSON
             json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
