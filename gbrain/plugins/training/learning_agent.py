@@ -299,8 +299,8 @@ class LearningAgent:
         response += f"第一题：\n{first_question['question']}\n"
 
         if first_question['question_type'] == 'choice':
-            for i, opt in enumerate(first_question['options']):
-                response += f"  {'ABCD'[i]}. {opt}\n"
+            for opt in first_question['options']:
+                response += f"  {opt}\n"
         elif first_question['question_type'] == 'judge':
             response += "  A. 对  B. 错\n"
 
