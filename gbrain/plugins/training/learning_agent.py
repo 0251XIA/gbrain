@@ -127,7 +127,7 @@ class LearningAgent:
     """
 
     def __init__(self, task_id: str, content: str, task_title: str, progress_id: str = None,
-                 scene_chain: list = None) -> None:
+                 scene_chain: list = None, quiz_items: list = None) -> None:
         """
         初始化 LearningAgent
 
@@ -136,7 +136,8 @@ class LearningAgent:
             content: 课件内容
             task_title: 培训任务标题
             progress_id: 学习进度 ID（用于保存考核记录）
-            scene_chain: 场景链（可选，不提供则自动生成）
+            scene_chain: 场景链（预生成或 null）
+            quiz_items: 考核题（预生成或 null）
         """
         self.task_id = task_id
         self.content = content
@@ -150,6 +151,10 @@ class LearningAgent:
         self.scene_engine = SceneLearningEngine(content, task_title, scene_chain)
         self.quiz_engine = QuizEngine(content, task_title)
         self.exploration_engine = ExplorationEngine(content, task_title)
+
+        # 如果有预生成的考核题，直接设置
+        if quiz_items:
+            self.quiz_engine.set_quiz_items(quiz_items)
 
         # 学习得分（来自场景学习）
         self._learning_score: float = 0.0
@@ -282,19 +287,23 @@ class LearningAgent:
 
     async def _start_quiz(self) -> dict:
         """开始考核"""
-        # 基于场景学习结果生成考核题（在线程池中运行避免阻塞）
-        quiz_items = await asyncio.to_thread(
-            self.scene_engine.generate_quiz_items, num_questions=7
-        )
-
-        if not quiz_items:
-            return self._build_response(
-                message_type="message",
-                content="抱歉，无法生成考核题，请联系管理员。"
+        # 检查是否已有预生成的考核题
+        if not self.quiz_engine.questions:
+            # 没有预生成考核题，需要生成
+            quiz_items = await asyncio.to_thread(
+                self.scene_engine.generate_quiz_items, num_questions=7
             )
 
-        # 设置考核题
-        self.quiz_engine.set_quiz_items(quiz_items)
+            if not quiz_items:
+                return self._build_response(
+                    message_type="message",
+                    content="抱歉，无法生成考核题，请联系管理员。"
+                )
+
+            # 设置考核题
+            self.quiz_engine.set_quiz_items(quiz_items)
+
+        # 设置考核题后进入 quiz 阶段
         self.set_stage("quiz")
 
         # 获取第一题
@@ -307,6 +316,7 @@ class LearningAgent:
 
         # 构建总分计算说明
         learning_score = self.scene_engine.learning_score
+        total_questions = len(self.quiz_engine.questions)
         question_type_text = {
             'choice': '选择题',
             'true_false': '判断题',
@@ -315,7 +325,7 @@ class LearningAgent:
         }.get(first_question.get('question_type', 'choice'), '选择题')
 
         response = "📋 考核开始！\n\n"
-        response += f"共 {len(quiz_items)} 道题，满分 100 分。\n"
+        response += f"共 {total_questions} 道题，满分 100 分。\n"
         response += f"其中学习得分占 {learning_score:.0f} 分（30%权重），\n"
         response += f"考核得分占 100 分（70%权重）。\n"
         response += f"70 分及格。\n\n"
@@ -470,13 +480,13 @@ class LearningAgent:
                     return self._build_response(
                         message_type="exploration",
                         content=result.content,
-                        metadata={"mode": "exploration", "suggestions": result.suggestions}
+                        metadata={"stage": "exploration", "suggestions": result.suggestions}
                     )
             # 纯模式切换或无问题，显示欢迎消息
             return self._build_response(
                 message_type="exploration",
                 content=WELCOME_MESSAGES.get("exploration", ""),
-                metadata={"mode": "exploration", "suggestions": []}
+                metadata={"stage": "exploration", "suggestions": []}
             )
         elif new_mode == "learning":
             # 如果包含"开始"，直接开始学习
@@ -485,18 +495,18 @@ class LearningAgent:
             return self._build_response(
                 message_type="scene",
                 content=WELCOME_MESSAGES.get("learning", ""),
-                metadata={"mode": "learning"}
+                metadata={"stage": "learning"}
             )
         elif new_mode == "quiz":
-            # 如果包含"开始"，直接开始考核
-            if not is_pure_mode_switch and ("开始" in msg_lower or msg_lower in ["考核", "考试", "测验"]):
+            # 如果包含"开始"或"考核"等触发词，直接开始考核
+            if ("开始" in msg_lower or "考核" in msg_lower or "考试" in msg_lower or "测验" in msg_lower):
                 self._quiz_started = True
                 return await self._start_quiz()
             self._quiz_started = False
             return self._build_response(
                 message_type="message",
                 content=WELCOME_MESSAGES.get("quiz", ""),
-                metadata={"mode": "quiz"}
+                metadata={"stage": "quiz"}
             )
 
         return self._build_response(
@@ -511,7 +521,7 @@ class LearningAgent:
         return self._build_response(
             message_type="exploration",
             content=result.content,
-            metadata={"mode": "exploration", "suggestions": result.suggestions}
+            metadata={"stage": "exploration", "suggestions": result.suggestions}
         )
 
     def _is_quiz_trigger(self, message: str) -> bool:

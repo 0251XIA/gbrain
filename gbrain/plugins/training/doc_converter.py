@@ -465,13 +465,28 @@ class DocumentConverter:
         return self._normalize_whitespace(content)
 
     def extract_title_from_content(self, content: str) -> str:
-        """从内容中提取标题"""
+        """从内容中提取标题（跳过幻灯片编号类标题）"""
         lines = content.split('\n')
         for line in lines:
             line = line.strip()
             if line.startswith('#'):
-                return line.lstrip('#').strip()
-        return content[:50].split('\n')[0].strip()
+                # 跳过纯幻灯片编号标题（如 "## 第 1 页" 或 "## 幻灯片 1"）
+                heading_text = line.lstrip('#').strip()
+                # 匹配 "第 X 页" 或 "幻灯片 X" 格式
+                if re.match(r'^(第\s*\d+\s*页|幻灯片\s*\d+)$', heading_text):
+                    continue
+                return heading_text
+        # 回退逻辑：取第一行内容，跳过幻灯片编号
+        first_line = content.split('\n')[0].strip()
+        if re.match(r'^(第\s*\d+\s*页|幻灯片\s*\d+)$', first_line.replace('#', '').strip()):
+            # 尝试从后续行找有效内容
+            for line in content.split('\n')[1:10]:
+                line = line.strip()
+                if line and not re.match(r'^(第\s*\d+\s*页|幻灯片\s*\d+)$', line.replace('#', '').strip()):
+                    # 跳过常见的元数据行
+                    if line not in ['社外秘', '人事总务部'] and not line.startswith('【'):
+                        return line[:50]
+        return first_line
 
 
 # 全局实例

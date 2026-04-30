@@ -618,7 +618,7 @@ async function loadAdminData() {
                     <div>
                         <strong>${t.title}</strong>
                         <span class="tag" style="margin-left: 0.5rem;">${t.task_type === 'onboarding' ? '入职' : '技能'}</span>
-                        <span class="status-badge ${'status-' + (t.status === 'published' ? 'in-progress' : t.status === 'archived' ? 'completed' : 'pending')}">${t.status_text}</span>
+                        <span class="status-badge ${'status-' + (t.status === 'published' ? 'in-progress' : t.status === 'archived' ? 'completed' : t.status === 'publishing' ? 'in-progress' : 'pending')}">${t.status_text}</span>
                     </div>
                     <div>
                         <button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; margin-right: 0.5rem;" onclick="regenerateTask('${t.id}')">清理内容</button>
@@ -666,9 +666,59 @@ async function loadAdminData() {
 }
 
 function publishTask(taskId) {
+    // 禁用按钮，显示发布中状态
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '发布中...';
+    btn.disabled = true;
+
+    // 不阻塞其他操作，后台加载
     fetch(`/api/training/admin/task/${taskId}/publish`, { method: 'POST' })
         .then(res => res.json())
-        .then(data => data.success && loadAdminData());
+        .then(data => {
+            if (data.success) {
+                // 静默刷新任务列表，不阻塞用户操作
+                fetch('/api/training/admin/tasks')
+                    .then(res => res.json())
+                    .then(tasksData => updateTaskRow(taskId, tasksData.tasks))
+                    .catch(() => {}); // 失败也不提示
+            } else {
+                alert('发布失败: ' + (data.error || '未知错误'));
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        })
+        .catch(e => {
+            alert('发布失败: ' + e);
+            btn.textContent = originalText;
+            btn.disabled = false;
+        });
+}
+
+function updateTaskRow(taskId, tasks) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // 只更新对应任务的行，不刷新整个列表
+    const taskRows = document.querySelectorAll('#task-management > div');
+    taskRows.forEach(row => {
+        if (row.querySelector(`button[onclick*="${taskId}"]`)) {
+            // 更新状态badge
+            const badge = row.querySelector('.status-badge');
+            if (badge) {
+                badge.className = 'status-badge ' + 'status-' + (task.status === 'published' ? 'in-progress' : task.status === 'archived' ? 'completed' : 'pending');
+                badge.textContent = task.status_text;
+            }
+            // 更新按钮
+            const publishBtn = row.querySelector('button[onclick*="publishTask"]');
+            if (task.status === 'published') {
+                if (publishBtn) {
+                    publishBtn.textContent = '归档';
+                    publishBtn.onclick = () => archiveTask(taskId);
+                }
+            }
+        }
+    });
 }
 
 function archiveTask(taskId) {

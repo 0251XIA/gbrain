@@ -116,6 +116,7 @@ class Database:
                 task_type TEXT NOT NULL,
                 content_source TEXT DEFAULT '[]',
                 quiz_items TEXT DEFAULT '[]',
+                scene_chain TEXT DEFAULT '[]',
                 content TEXT DEFAULT '',
                 deadline TEXT,
                 priority INTEGER DEFAULT 2,
@@ -241,11 +242,13 @@ class Database:
             with self.get_cursor() as c:
                 c.execute(
                     """INSERT OR REPLACE INTO training_tasks
-                       (id, title, description, task_type, content_source, quiz_items, content, deadline, priority, status, created_by)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       (id, title, description, task_type, content_source, quiz_items, scene_chain, content, deadline, priority, status, created_by)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (task['id'], task['title'], task.get('description', ''),
                      task['task_type'], json.dumps(task.get('content_source', [])),
-                     json.dumps(task.get('quiz_items', [])), task.get('content', ''),
+                     json.dumps(task.get('quiz_items', [])),
+                     json.dumps(task.get('scene_chain', [])),
+                     task.get('content', ''),
                      task.get('deadline', ''), task.get('priority', 2),
                      task.get('status', 'draft'), task.get('created_by', ''))
                 )
@@ -264,6 +267,7 @@ class Database:
                 # 解析 JSON 字段
                 result['content_source'] = json.loads(result.get('content_source', '[]'))
                 result['quiz_items'] = json.loads(result.get('quiz_items', '[]'))
+                result['scene_chain'] = json.loads(result.get('scene_chain', '[]'))
                 return result
         return None
 
@@ -279,6 +283,7 @@ class Database:
                 result = dict(row)
                 result['content_source'] = json.loads(result.get('content_source', '[]'))
                 result['quiz_items'] = json.loads(result.get('quiz_items', '[]'))
+                result['scene_chain'] = json.loads(result.get('scene_chain', '[]'))
                 tasks.append(result)
             return tasks
 

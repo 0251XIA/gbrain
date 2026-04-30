@@ -954,10 +954,23 @@ class SceneLearningEngine:
         self.scene_responses = []
 
     def get_current_scene(self) -> Optional[dict]:
-        """获取当前场景"""
+        """获取当前场景（始终返回 dict，兼容 Scene 对象）"""
         if self.current_scene_index >= len(self.scene_chain):
             return None
-        return self.scene_chain[self.current_scene_index]
+        scene = self.scene_chain[self.current_scene_index]
+        # 兼容 Scene 对象和 dict
+        if hasattr(scene, '__dict__'):
+            # Scene 对象转为 dict
+            return {
+                'index': scene.index,
+                'title': scene.title,
+                'description': scene.description,
+                'knowledge_points': scene.knowledge_points,
+                'correct_answer': scene.correct_answer,
+                'explanation': scene.explanation,
+                'hint': scene.hint
+            }
+        return scene
 
     def get_progress(self) -> dict:
         """获取学习进度"""
@@ -1202,13 +1215,30 @@ class SceneLearningEngine:
         if not self.scene_chain:
             return []
 
-        # 构建场景摘要
-        scenes_summary = "\n".join([
-            f"场景{i+1}：{s.get('title', '')}\n"
-            f"  描述：{s.get('description', '')}\n"
-            f"  正确答案：{s.get('correct_answer', '')}"
-            for i, s in enumerate(self.scene_chain)
-        ])
+        # 构建场景摘要（兼容 Scene 对象和 dict）
+        try:
+            scenes_summary_parts = []
+            for i, s in enumerate(self.scene_chain):
+                # 兼容 Scene 对象和 dict
+                if hasattr(s, '__dict__'):
+                    # Scene 对象
+                    title = s.title
+                    description = s.description
+                    correct_answer = s.correct_answer
+                else:
+                    # dict
+                    title = s.get('title', '')
+                    description = s.get('description', '')
+                    correct_answer = s.get('correct_answer', '')
+                scenes_summary_parts.append(
+                    f"场景{i+1}：{title}\n"
+                    f"  描述：{description}\n"
+                    f"  正确答案：{correct_answer}"
+                )
+            scenes_summary = "\n".join(scenes_summary_parts)
+        except Exception as e:
+            print(f"构建场景摘要失败: {e}")
+            scenes_summary = "无场景内容"
 
         weak_points_str = ', '.join(self.weak_points) if self.weak_points else '无'
 

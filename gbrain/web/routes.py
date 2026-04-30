@@ -20,7 +20,7 @@ from gbrain.database import Database
 learning_sessions: dict[str, LearningAgent] = {}
 
 # 状态映射常量
-STATUS_TEXT_MAP = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
+STATUS_TEXT_MAP = {"draft": "草稿", "publishing": "发布中...", "published": "已发布", "archived": "已归档"}
 
 
 def _clean_lecture_content(content: str) -> str:
@@ -785,10 +785,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 # 转换为 Markdown
                 markdown_content = converter.convert_to_markdown(file_path)
 
-                # 提取标题
-                title = converter.extract_title_from_content(markdown_content)
-                if not title:
-                    title = file.filename.replace(ext, '')
+                # 使用文件名（不含扩展名）作为页面标题
+                title = file.filename.rsplit('.', 1)[0] if '.' in file.filename else file.filename
 
                 # 存入知识库
                 page_id = str(uuid.uuid4())
@@ -938,28 +936,31 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                 agent.scene_engine.reset()
                 agent.set_stage("learning")
             else:
-                # 尝试从数据库加载场景链
-                db = Database()
-                saved_chain = db.get_scene_chain(task_id)
+                # 优先使用任务预生成的内容
+                scene_chain = task.scene_chain if task.scene_chain else None
+                quiz_items = task.quiz_items if task.quiz_items else None
 
-                if saved_chain and saved_chain.get('scenes'):
-                    # 使用数据库中的场景链
-                    scene_chain = saved_chain['scenes']
-                else:
-                    # 生成新场景链并保存到数据库
-                    from gbrain.plugins.training.skills.scene_learning.generator import generate_scene_chain as gen_chain
-                    chain_obj = gen_chain(clean_content, task_id=task_id)
-                    scene_chain = [s.__dict__ for s in chain_obj.scenes] if chain_obj else []
+                # 回退：从数据库加载场景链
+                if not scene_chain:
+                    db = Database()
+                    saved_chain = db.get_scene_chain(task_id)
+                    if saved_chain and saved_chain.get('scenes'):
+                        scene_chain = saved_chain['scenes']
+                    else:
+                        # 生成新场景链并保存到数据库
+                        from gbrain.plugins.training.skills.scene_learning.generator import generate_scene_chain as gen_chain
+                        chain_obj = gen_chain(clean_content, task_id=task_id)
+                        scene_chain = [s.__dict__ for s in chain_obj.scenes] if chain_obj else []
 
-                    # 保存到数据库
-                    if scene_chain:
-                        import uuid
-                        db.insert_scene_chain({
-                            'id': str(uuid.uuid4()),
-                            'task_id': task_id,
-                            'scenes': scene_chain,
-                            'weak_points': []
-                        })
+                        # 保存到数据库
+                        if scene_chain:
+                            import uuid
+                            db.insert_scene_chain({
+                                'id': str(uuid.uuid4()),
+                                'task_id': task_id,
+                                'scenes': scene_chain,
+                                'weak_points': []
+                            })
 
                 # 创建学习会话
                 learning_sessions[task_id] = LearningAgent(
@@ -967,7 +968,8 @@ def register_routes(app: FastAPI, templates: Jinja2Templates):
                     content=clean_content,
                     task_title=task.title,
                     progress_id=task_id,
-                    scene_chain=scene_chain
+                    scene_chain=scene_chain,
+                    quiz_items=quiz_items
                 )
 
             agent = learning_sessions[task_id]

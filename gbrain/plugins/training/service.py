@@ -121,8 +121,56 @@ class TrainingService:
         return self.db.update_training_task_status(task_id, status)
 
     def publish_task(self, task_id: str) -> bool:
-        """发布任务"""
-        return self.update_task_status(task_id, TaskStatus.PUBLISHED.value)
+        """发布任务（预生成场景链和考核题）- 改为立即返回，后台异步生成"""
+        task = self.get_task(task_id)
+        if not task:
+            return False
+
+        # 先设置为发布中状态
+        self.update_task_status(task_id, TaskStatus.PUBLISHING.value)
+
+        # 记录任务信息，用于后台生成
+        import threading
+
+        content = task.content or ""
+        task_title = task.title
+
+        def background_generate():
+            try:
+                from gbrain.database import Database
+                from gbrain.plugins.training.skills.scene_learning.engine import SceneLearningEngine
+
+                # 在后台线程中创建新的 Database 实例
+                db = Database()
+
+                scene_engine = SceneLearningEngine(content, task_title)
+                scene_chain = scene_engine.generate_scene_chain_sync(num_scenes=5)
+                print(f"[预生成] 任务 {task_id} 场景链: {len(scene_chain)} 个")
+
+                scene_engine.set_scene_chain(scene_chain)
+                quiz_items_data = scene_engine.generate_quiz_items(num_questions=7)
+                print(f"[预生成] 任务 {task_id} 考核题: {len(quiz_items_data)} 道")
+
+                db.update_training_task(task_id, {
+                    'scene_chain': json.dumps(scene_chain, ensure_ascii=False),
+                    'quiz_items': json.dumps(quiz_items_data, ensure_ascii=False),
+                    'status': TaskStatus.PUBLISHED.value
+                })
+            except Exception as e:
+                print(f"[预生成失败] 任务 {task_id}: {e}")
+                # 在后台线程中也创建新的 Database 实例来更新状态
+                try:
+                    from gbrain.database import Database
+                    db = Database()
+                    db.update_training_task_status(task_id, TaskStatus.DRAFT.value)
+                except Exception as update_err:
+                    print(f"[状态回滚失败] 任务 {task_id}: {update_err}")
+
+        # 后台异步执行，不阻塞
+        thread = threading.Thread(target=background_generate)
+        thread.daemon = True
+        thread.start()
+        return True
 
     def archive_task(self, task_id: str) -> bool:
         """归档任务"""
@@ -161,6 +209,7 @@ class TrainingService:
             task_type=TaskType(data.get('task_type', 'onboarding')),
             content_source=data.get('content_source', []),
             quiz_items=quiz_items,
+            scene_chain=data.get('scene_chain', []),
             content=data.get('content', ''),
             deadline=datetime.fromisoformat(data['deadline']) if data.get('deadline') else datetime.now(),
             priority=data.get('priority', 2),

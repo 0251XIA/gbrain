@@ -48,10 +48,23 @@ class SceneLearningEngine:
         self.status = "active"
 
     def get_current_scene(self) -> Optional[dict]:
-        """获取当前场景"""
+        """获取当前场景（始终返回 dict，兼容 Scene 对象）"""
         if self.current_scene_index >= len(self.scene_chain):
             return None
-        return self.scene_chain[self.current_scene_index]
+        scene = self.scene_chain[self.current_scene_index]
+        # 兼容 Scene 对象和 dict
+        if hasattr(scene, '__dict__'):
+            # Scene 对象转为 dict
+            return {
+                'index': scene.index,
+                'title': scene.title,
+                'description': scene.description,
+                'knowledge_points': scene.knowledge_points,
+                'correct_answer': scene.correct_answer,
+                'explanation': scene.explanation,
+                'hint': scene.hint
+            }
+        return scene
 
     def get_progress(self) -> dict:
         """获取学习进度"""
@@ -320,13 +333,30 @@ class SceneLearningEngine:
         if not self.scene_chain:
             return []
 
-        # 构建场景摘要
-        scenes_summary = "\n".join([
-            f"场景{i+1}：{s.get('title', '')}\n"
-            f"  描述：{s.get('description', '')}\n"
-            f"  正确答案：{s.get('correct_answer', '')}"
-            for i, s in enumerate(self.scene_chain)
-        ])
+        # 构建场景摘要（兼容 Scene 对象和 dict）
+        try:
+            scenes_summary_parts = []
+            for i, s in enumerate(self.scene_chain):
+                # 兼容 Scene 对象和 dict
+                if hasattr(s, '__dict__'):
+                    # Scene 对象
+                    title = s.title
+                    description = s.description
+                    correct_answer = s.correct_answer
+                else:
+                    # dict
+                    title = s.get('title', '')
+                    description = s.get('description', '')
+                    correct_answer = s.get('correct_answer', '')
+                scenes_summary_parts.append(
+                    f"场景{i+1}：{title}\n"
+                    f"  描述：{description}\n"
+                    f"  正确答案：{correct_answer}"
+                )
+            scenes_summary = "\n".join(scenes_summary_parts)
+        except Exception as e:
+            print(f"构建场景摘要失败: {e}")
+            scenes_summary = "无场景内容"
 
         weak_points_str = ', '.join(self.weak_points) if self.weak_points else '无'
 
@@ -378,3 +408,79 @@ class SceneLearningEngine:
             print(f"生成考核题失败: {e}")
 
         return []
+
+    def generate_scene_chain_sync(self, num_scenes: int = 5) -> list[dict]:
+        """
+        预生成场景链（同步版本，供发布时调用）
+
+        Args:
+            num_scenes: 场景数量
+
+        Returns:
+            场景链列表
+        """
+        if not self.content:
+            return []
+
+        # 提取章节和知识点
+        sections = re.findall(r'^##?\s+(.+?)$', self.content, re.MULTILINE)
+        content_brief = self.content[:5000] if len(self.content) > 5000 else self.content
+
+        prompt = f"""基于以下培训课件内容，生成 {num_scenes} 个学习场景。
+
+课件内容：
+{content_brief}
+
+要求：
+1. 每个场景要基于真实工作情境
+2. 场景描述要具体，包含时间、地点、人物、事件
+3. 每个场景附带：正确答案、解析、关联知识点
+4. 场景之间要有递进关系（从基础到进阶）
+
+请用以下JSON格式返回：
+{{
+    "scenes": [
+        {{
+            "title": "场景标题",
+            "description": "场景描述（工作情境）",
+            "hint": "给学员的提示",
+            "correct_answer": "正确答案",
+            "explanation": "解析说明",
+            "knowledge_points": ["知识点1", "知识点2"]
+        }}
+    ]
+}}"""
+
+        try:
+            from gbrain.plugins.training.course_gen import call_llm
+            import json
+
+            response_text = call_llm(prompt, "")
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                scenes = result.get('scenes', [])
+                for i, scene in enumerate(scenes):
+                    if not scene.get('title'):
+                        scene['title'] = f"场景{i+1}"
+                return scenes
+        except Exception as e:
+            print(f"生成场景链失败: {e}")
+
+        # 回退：生成简单场景
+        return self._generate_default_scenes(num_scenes)
+
+    def _generate_default_scenes(self, num_scenes: int) -> list[dict]:
+        """生成默认场景（当AI生成失败时）"""
+        sections = re.findall(r'^##\s+(.+?)$', self.content, re.MULTILINE)
+        scenes = []
+        for i, section in enumerate(sections[:num_scenes]):
+            scenes.append({
+                'title': section,
+                'description': f'请说明你对"{section}"的理解和应用',
+                'hint': '结合培训内容回答',
+                'correct_answer': '请参考培训课件中的相关内容',
+                'explanation': f'根据培训课件 "{section}" 部分',
+                'knowledge_points': [section]
+            })
+        return scenes

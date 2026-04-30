@@ -17,6 +17,7 @@ class TaskType(Enum):
 class TaskStatus(Enum):
     """任务状态"""
     DRAFT = "draft"               # 草稿
+    PUBLISHING = "publishing"     # 发布中
     PUBLISHED = "published"       # 已发布
     ARCHIVED = "archived"         # 已归档
 
@@ -75,6 +76,7 @@ class TrainingTask:
     task_type: TaskType
     content_source: list[str]     # 关联的 gbrain 知识库页面 ID
     quiz_items: list[QuizItem] = field(default_factory=list)
+    scene_chain: list = field(default_factory=list)  # 预生成的学习场景链
     content: str = ""             # 课件正文内容
     deadline: datetime = None
     priority: int = 1             # 1=高，2=中，3=低

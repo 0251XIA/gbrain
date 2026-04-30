@@ -291,7 +291,30 @@ class QuizEngine:
                     explanation=item.get('explanation', '')
                 ))
             else:
-                self.questions.append(item)
+                # 处理已存在的 QuizItem 对象（可能来自其他模块）
+                # 兼容 plugins/training/models.py 的 QuizItem（使用 question_type）
+                if hasattr(item, 'type'):
+                    # 已经是正确格式的 QuizItem
+                    self.questions.append(item)
+                elif hasattr(item, 'question_type'):
+                    # 来自 plugins/training/models.py 的 QuizItem，需要转换
+                    # correct_index 转 correct_answer
+                    correct_idx = getattr(item, 'correct_index', 0)
+                    if isinstance(correct_idx, int) and 0 <= correct_idx <= 3:
+                        correct_answer = chr(65 + correct_idx)
+                    else:
+                        correct_answer = str(correct_idx)
+                    self.questions.append(QuizItem(
+                        id=str(getattr(item, 'id', f'q{len(self.questions)+1}')),
+                        type=getattr(item, 'question_type', 'choice'),
+                        question=getattr(item, 'question', ''),
+                        options=getattr(item, 'options', []),
+                        correct_answer=correct_answer,
+                        explanation=getattr(item, 'explanation', '')
+                    ))
+                else:
+                    # 未知格式，尝试作为 dict 处理
+                    self.questions.append(item)
         self.state.current_question = 0
         self.state.total_questions = len(self.questions)
         self.state.answers = []
